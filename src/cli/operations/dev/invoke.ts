@@ -9,6 +9,8 @@ export { type InvokeStreamingOptions, type SSELogger } from './invoke-types';
 /**
  * Parse a single SSE data line and extract the content.
  */
+// TODO(java-rfc Q2): this duplicates parseSSELine in aws/agentcore.ts — dedupe into one shared
+// SSE util. See review/6-rfc-open-questions.md.
 export function parseSSELine(line: string): { content: string | null; error: string | null } {
   if (!line.startsWith('data:')) {
     return { content: null, error: null };

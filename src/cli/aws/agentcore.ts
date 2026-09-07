@@ -112,6 +112,8 @@ export interface StopRuntimeSessionResult {
  * Parse a single SSE data line and extract the content.
  * Returns null if the line is not a data line or contains an error.
  */
+// TODO(java-rfc Q2): this duplicates parseSSELine in operations/dev/invoke.ts — dedupe into one
+// shared SSE util. See review/6-rfc-open-questions.md.
 export function parseSSELine(line: string): { content: string | null; error: string | null } {
   if (!line.startsWith('data:')) {
     return { content: null, error: null };

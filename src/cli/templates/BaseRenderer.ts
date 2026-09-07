@@ -61,12 +61,20 @@ export abstract class BaseRenderer {
     const baseDir = path.join(templateDir, 'base');
     await copyAndRenderDir(baseDir, projectDir, templateData);
 
-    // Render capability templates based on config
-    // Only render if the capability directory exists (not all SDKs have all capabilities)
+    // Render capability templates based on config.
+    // Only render if the capability directory exists (not all SDKs have all capabilities).
+    // Java capabilities carry their own src/main/java/<package>/ path and merge into the project
+    // source tree, so they render into projectDir; Python/TS capabilities render into a
+    // capability subdirectory (a Python package / TS module).
+    // TODO(java-rfc Q1): revisit this per-language conditional — a uniform "render into projectDir,
+    // dest path lives inside the capability template" model would drop it but restructures the
+    // Python/TS capability dirs. See review/6-rfc-open-questions.md.
+    const isJavaLayout = this.config.targetLanguage === 'Java';
+
     if (this.shouldRenderMemory()) {
       const memoryCapabilityDir = path.join(templateDir, 'capabilities', 'memory');
       if (existsSync(memoryCapabilityDir)) {
-        const memoryTargetDir = path.join(projectDir, 'memory');
+        const memoryTargetDir = isJavaLayout ? projectDir : path.join(projectDir, 'memory');
         await copyAndRenderDir(memoryCapabilityDir, memoryTargetDir, templateData);
       }
     }
@@ -74,12 +82,16 @@ export abstract class BaseRenderer {
     if (this.shouldRenderPayment()) {
       const paymentCapabilityDir = path.join(templateDir, 'capabilities', 'payments');
       if (existsSync(paymentCapabilityDir)) {
-        const capabilitiesDir = path.join(projectDir, 'capabilities');
-        mkdirSync(capabilitiesDir, { recursive: true });
-        const capInitPath = path.join(capabilitiesDir, '__init__.py');
-        if (!existsSync(capInitPath)) writeFileSync(capInitPath, '');
-        const paymentTargetDir = path.join(capabilitiesDir, 'payments');
-        await copyAndRenderDir(paymentCapabilityDir, paymentTargetDir, templateData);
+        if (isJavaLayout) {
+          await copyAndRenderDir(paymentCapabilityDir, projectDir, templateData);
+        } else {
+          const capabilitiesDir = path.join(projectDir, 'capabilities');
+          mkdirSync(capabilitiesDir, { recursive: true });
+          const capInitPath = path.join(capabilitiesDir, '__init__.py');
+          if (!existsSync(capInitPath)) writeFileSync(capInitPath, '');
+          const paymentTargetDir = path.join(capabilitiesDir, 'payments');
+          await copyAndRenderDir(paymentCapabilityDir, paymentTargetDir, templateData);
+        }
       }
     }
 
