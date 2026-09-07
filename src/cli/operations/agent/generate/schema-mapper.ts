@@ -129,15 +129,27 @@ export function mapGenerateConfigToAgent(config: GenerateConfig): AgentEnvSpec {
     ...(needsActorHeader && !(config.requestHeaderAllowlist ?? []).includes(ACTOR_ID_HEADER) ? [ACTOR_ID_HEADER] : []),
   ];
 
+  // Java agents are container-only (there is no managed Java CodeZip runtime yet): force Container
+  // and omit runtimeVersion — the Dockerfile controls the JDK, and a JAVA_* runtimeVersion would be
+  // rejected by the runtime. See the tracker / doc 4 for the native-runtime future work.
+  const isJava = config.language === 'Java';
+
   return {
     name: config.projectName,
-    build: config.buildType ?? 'CodeZip',
+    build: isJava ? 'Container' : (config.buildType ?? 'CodeZip'),
     ...(config.dockerfile && { dockerfile: config.dockerfile }),
     entrypoint: (config.language === 'TypeScript'
       ? DEFAULT_ENTRYPOINT_BY_LANGUAGE.TypeScript
-      : DEFAULT_PYTHON_ENTRYPOINT) as FilePath,
+      : isJava
+        ? DEFAULT_ENTRYPOINT_BY_LANGUAGE.Java
+        : DEFAULT_PYTHON_ENTRYPOINT) as FilePath,
     codeLocation: codeLocation as DirectoryPath,
-    runtimeVersion: config.language === 'TypeScript' ? DEFAULT_RUNTIME_BY_LANGUAGE.TypeScript : DEFAULT_PYTHON_VERSION,
+    ...(isJava
+      ? {}
+      : {
+          runtimeVersion:
+            config.language === 'TypeScript' ? DEFAULT_RUNTIME_BY_LANGUAGE.TypeScript : DEFAULT_PYTHON_VERSION,
+        }),
     ...(networkMode !== undefined && { networkMode }),
     protocol,
     ...(networkMode === 'VPC' &&
@@ -315,7 +327,8 @@ export async function mapGenerateConfigToRenderConfig(
       }
     })(),
     isVpc: config.networkMode === 'VPC',
-    buildType: config.buildType,
+    // Java is container-only, so the renderer must emit the Dockerfile regardless of the --build flag.
+    buildType: config.language === 'Java' ? 'Container' : config.buildType,
     memoryProviders:
       isMcp || (config.language === 'TypeScript' && config.sdk !== 'Strands')
         ? []

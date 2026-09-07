@@ -179,7 +179,7 @@ export function validateCreateOptions(options: CreateOptions, cwd?: string): Val
     // Validate language
     const langResult = TargetLanguageSchema.safeParse(options.language);
     if (!langResult.success) {
-      return { valid: false, error: `Invalid language: ${options.language}. Use Python or TypeScript` };
+      return { valid: false, error: `Invalid language: ${options.language}. Use Python, TypeScript, or Java` };
     }
 
     // Validate framework
@@ -205,7 +205,7 @@ export function validateCreateOptions(options: CreateOptions, cwd?: string): Val
     // Framework must ship a template for the chosen language (e.g. Vercel AI is
     // TypeScript-only, the other open-source frameworks are Python-only).
     if (
-      (langResult.data === 'Python' || langResult.data === 'TypeScript') &&
+      (langResult.data === 'Python' || langResult.data === 'TypeScript' || langResult.data === 'Java') &&
       !isFrameworkSupportedForLanguage(langResult.data, fwResult.data)
     ) {
       const supported = getFrameworksForLanguage(langResult.data).join(', ');
