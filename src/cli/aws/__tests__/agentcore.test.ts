@@ -23,9 +23,11 @@ describe('parseSSELine', () => {
     expect(result.error).toBeNull();
   });
 
-  it('returns raw content for non-JSON data', () => {
+  it('returns raw content for non-JSON data, preserving the byte after "data:"', () => {
+    // We intentionally do NOT strip the SSE cosmetic leading space, so a Spring/Java agent's
+    // significant word-separator spaces survive (see parseSSELine rationale).
     const result = parseSSELine('data: plain text here');
-    expect(result.content).toBe('plain text here');
+    expect(result.content).toBe(' plain text here');
     expect(result.error).toBeNull();
   });
 
@@ -60,9 +62,10 @@ describe('parseSSELine', () => {
   });
 
   it('handles empty data field', () => {
-    const result = parseSSELine('data: ');
-    expect(result.content).toBe('');
-    expect(result.error).toBeNull();
+    // A truly empty data line has no byte after "data:".
+    expect(parseSSELine('data:').content).toBe('');
+    // "data: " carries a single space (a lone-whitespace token), which we preserve.
+    expect(parseSSELine('data: ').content).toBe(' ');
   });
 });
 
@@ -90,9 +93,15 @@ describe('parseSSE', () => {
     expect(parseSSE('data: "only line"')).toBe('only line');
   });
 
-  it('handles raw non-JSON data lines', () => {
-    const text = 'data: hello\ndata: world';
-    expect(parseSSE(text)).toBe('helloworld');
+  it('preserves word-separator spaces across chunked plain-text SSE (Spring/Java agents)', () => {
+    // Spring streams raw tokens; the first word has no leading space, later words carry theirs.
+    // A spec-strict strip would render "helloworld" / "alphabeta"; we keep the separators.
+    expect(parseSSE('data:hello\ndata: world')).toBe('hello world');
+    expect(parseSSE('data:alpha\ndata: beta\ndata: gamma')).toBe('alpha beta gamma');
+  });
+
+  it('does not drop chunks that lack a space after "data:"', () => {
+    expect(parseSSELine('data:Code').content).toBe('Code');
   });
 });
 

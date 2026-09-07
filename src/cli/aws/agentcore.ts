@@ -113,10 +113,16 @@ export interface StopRuntimeSessionResult {
  * Returns null if the line is not a data line or contains an error.
  */
 export function parseSSELine(line: string): { content: string | null; error: string | null } {
-  if (!line.startsWith('data: ')) {
+  if (!line.startsWith('data:')) {
     return { content: null, error: null };
   }
-  const raw = line.slice(6);
+  // Keep everything after "data:" WITHOUT stripping the SSE cosmetic leading space. Spring/Java
+  // agents stream raw text chunks whose leading space is a significant word separator (" will"); a
+  // spec-strict strip (slice(6)) both eats that space (rendering "Iwill") and — combined with the
+  // old `data: ` guard — drops chunks that have no leading space. JSON-framed producers (Python/TS
+  // ConverseStream, {"text":...}) are unaffected because JSON.parse ignores the leading whitespace.
+  // Mirrors the java-on-aws chat UI's substring(5) reconstruction.
+  const raw = line.slice(5);
   try {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed === 'string') {
