@@ -4,10 +4,17 @@ import { z } from 'zod';
 // Feature Constants (shared across all schemas)
 // ============================================================================
 
-export const SDKFrameworkSchema = z.enum(['Strands', 'LangChain_LangGraph', 'GoogleADK', 'OpenAIAgents', 'VercelAI']);
+export const SDKFrameworkSchema = z.enum([
+  'Strands',
+  'LangChain_LangGraph',
+  'GoogleADK',
+  'OpenAIAgents',
+  'VercelAI',
+  'SpringAI',
+]);
 export type SDKFramework = z.infer<typeof SDKFrameworkSchema>;
 
-export const TargetLanguageSchema = z.enum(['Python', 'TypeScript', 'Other']);
+export const TargetLanguageSchema = z.enum(['Python', 'TypeScript', 'Java', 'Other']);
 export type TargetLanguage = z.infer<typeof TargetLanguageSchema>;
 
 export const ModelProviderSchema = z.enum(['Bedrock', 'Gemini', 'OpenAI', 'Anthropic', 'LiteLLM']);
@@ -51,6 +58,8 @@ export const SDK_MODEL_PROVIDER_MATRIX: Record<SDKFramework, readonly ModelProvi
   GoogleADK: ['Gemini'] as const,
   OpenAIAgents: ['OpenAI'] as const,
   VercelAI: ['Bedrock', 'Anthropic', 'OpenAI', 'Gemini'] as const,
+  // Spring AI supports Bedrock (Converse) plus the hosted providers via its model starters.
+  SpringAI: ['Bedrock', 'Anthropic', 'OpenAI', 'Gemini'] as const,
 };
 
 /**
@@ -161,20 +170,33 @@ export type NodeRuntime = z.infer<typeof NodeRuntimeSchema>;
 /** Default Node.js runtime version for new TypeScript agents */
 export const DEFAULT_NODE_VERSION: NodeRuntime = 'NODE_22';
 
-/** Combined runtime version schema supporting both Python and Node/TypeScript runtimes */
-export const RuntimeVersionSchema = z.union([PythonRuntimeSchema, NodeRuntimeSchema]);
+// Java runtimes. There is no AgentCore-managed Java (CodeZip) runtime yet, so Java agents are
+// Container-only and omit runtimeVersion at deploy (the Dockerfile controls the JDK). This enum
+// exists for schema completeness and forward-compat with a native Java runtime (see doc 4).
+export const JavaRuntimeSchema = z.enum(['JAVA_21', 'JAVA_25']);
+export type JavaRuntime = z.infer<typeof JavaRuntimeSchema>;
+
+/** Default Java runtime version (LTS). */
+export const DEFAULT_JAVA_VERSION: JavaRuntime = 'JAVA_21';
+
+/** Combined runtime version schema supporting Python, Node/TypeScript, and Java runtimes */
+export const RuntimeVersionSchema = z.union([PythonRuntimeSchema, NodeRuntimeSchema, JavaRuntimeSchema]);
 export type RuntimeVersion = z.infer<typeof RuntimeVersionSchema>;
 
 /** Default entrypoint filename for each target language (create path). */
-export const DEFAULT_ENTRYPOINT_BY_LANGUAGE: Record<'Python' | 'TypeScript', string> = {
+export const DEFAULT_ENTRYPOINT_BY_LANGUAGE: Record<'Python' | 'TypeScript' | 'Java', string> = {
   Python: 'main.py',
   TypeScript: 'main.js',
+  // Java is Container-only; the Dockerfile CMD runs the jar. The entrypoint names the
+  // @AgentCoreInvocation main class for documentation/schema purposes (it is not executed directly).
+  Java: 'src/main/java/com/example/agent/AgentApplication.java',
 };
 
 /** Default runtime version for each target language (create path). */
-export const DEFAULT_RUNTIME_BY_LANGUAGE: Record<'Python' | 'TypeScript', RuntimeVersion> = {
+export const DEFAULT_RUNTIME_BY_LANGUAGE: Record<'Python' | 'TypeScript' | 'Java', RuntimeVersion> = {
   Python: DEFAULT_PYTHON_VERSION,
   TypeScript: DEFAULT_NODE_VERSION,
+  Java: DEFAULT_JAVA_VERSION,
 };
 
 export const NetworkModeSchema = z.enum(['PUBLIC', 'VPC']);
@@ -228,7 +250,7 @@ export type ProtocolMode = z.infer<typeof ProtocolModeSchema>;
  * MCP is a standalone tool server with no framework.
  */
 export const PROTOCOL_FRAMEWORK_MATRIX: Record<ProtocolMode, readonly SDKFramework[]> = {
-  HTTP: ['Strands', 'LangChain_LangGraph', 'GoogleADK', 'OpenAIAgents', 'VercelAI'] as const,
+  HTTP: ['Strands', 'LangChain_LangGraph', 'GoogleADK', 'OpenAIAgents', 'VercelAI', 'SpringAI'] as const,
   MCP: [] as const,
   A2A: ['Strands', 'GoogleADK', 'LangChain_LangGraph'] as const,
   AGUI: ['Strands', 'LangChain_LangGraph', 'GoogleADK'] as const,
@@ -257,6 +279,7 @@ export function isFrameworkSupportedForProtocol(protocol: ProtocolMode, framewor
 export const LANGUAGE_FRAMEWORK_MATRIX = {
   Python: ['Strands', 'LangChain_LangGraph', 'GoogleADK', 'OpenAIAgents'],
   TypeScript: ['Strands', 'VercelAI'],
+  Java: ['SpringAI'],
 } as const satisfies Record<string, readonly SDKFramework[]>;
 
 /** Languages that scaffold from templates (excludes 'Other', which is BYO-only). */

@@ -80,17 +80,19 @@ export type BuildType = z.infer<typeof BuildTypeSchema>;
 // Not re-exported here to avoid duplicate export conflicts
 
 /**
- * Entrypoint schema - supports both Python (.py) and TypeScript (.ts/.js) files.
+ * Entrypoint schema - supports Python (.py), TypeScript (.ts/.js), and Java (.java) files.
  * Python: main.py or main.py:handler
  * TypeScript: main.ts, main.js, or index.ts
+ * Java: Container-only; names the @AgentCoreInvocation main class (not executed directly — the
+ *       Dockerfile CMD runs the built jar).
  */
 export const EntrypointSchema = z
   .string()
   .min(1)
   .regex(
     // eslint-disable-next-line security/detect-unsafe-regex -- character class quantifiers don't cause backtracking
-    /^[a-zA-Z0-9_][a-zA-Z0-9_/.-]*\.(py|ts|js)(:[a-zA-Z_][a-zA-Z0-9_]*)?$/,
-    'Must be a Python (.py) or TypeScript (.ts/.js) file path with optional handler (e.g., "main.py:handler" or "index.ts")'
+    /^[a-zA-Z0-9_][a-zA-Z0-9_/.-]*\.(py|ts|js|java)(:[a-zA-Z_][a-zA-Z0-9_]*)?$/,
+    'Must be a Python (.py), TypeScript (.ts/.js), or Java (.java) file path with optional handler (e.g., "main.py:handler", "index.ts", or "AgentApplication.java")'
   ) as unknown as z.ZodType<FilePath>;
 
 const DirectoryPathSchema = z.string().min(1) as unknown as z.ZodType<DirectoryPath>;
