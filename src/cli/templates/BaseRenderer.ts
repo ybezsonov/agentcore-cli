@@ -79,6 +79,18 @@ export abstract class BaseRenderer {
       }
     }
 
+    // Gateway (MCP tools) capability. Python/TS express this inline in their base template, so they
+    // ship no capabilities/gateway dir and the existsSync guard skips them; only Java carries a
+    // gateway capability tree (its files live under src/main/java/<package>/ and merge into the
+    // project source, so they render into projectDir).
+    if (this.config.hasGateway) {
+      const gatewayCapabilityDir = path.join(templateDir, 'capabilities', 'gateway');
+      if (existsSync(gatewayCapabilityDir)) {
+        const gatewayTargetDir = isJavaLayout ? projectDir : path.join(projectDir, 'gateway');
+        await copyAndRenderDir(gatewayCapabilityDir, gatewayTargetDir, templateData);
+      }
+    }
+
     if (this.shouldRenderPayment()) {
       const paymentCapabilityDir = path.join(templateDir, 'capabilities', 'payments');
       if (existsSync(paymentCapabilityDir)) {

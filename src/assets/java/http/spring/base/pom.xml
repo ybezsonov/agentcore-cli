@@ -78,6 +78,33 @@
             <artifactId>spring-ai-agentcore-memory</artifactId>
         </dependency>
 {{/if}}
+{{#if hasGateway}}
+
+        <!-- AgentCore Gateway tools over MCP (streamable HTTP). The MCP client is disabled by default
+             and enabled per-gateway by GatewayEnvironmentPostProcessor only when the gateway URL env
+             var is injected at deploy, so it stays inert locally. -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-mcp-client</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-autoconfigure-mcp-client-common</artifactId>
+        </dependency>
+        <!-- SigV4 signing for AWS_IAM gateways (McpConfig). -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>auth</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>http-auth-aws</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>regions</artifactId>
+        </dependency>
+{{/if}}
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

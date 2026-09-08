@@ -1,0 +1,3 @@
+# Registers the AGENTCORE_GATEWAY_<NAME>_URL -> MCP client connection bridge so it runs before the MCP
+# client auto-configuration evaluates its enabled gate.
+org.springframework.boot.EnvironmentPostProcessor=com.example.agent.mcp.GatewayEnvironmentPostProcessor

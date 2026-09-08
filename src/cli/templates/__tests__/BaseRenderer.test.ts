@@ -119,6 +119,33 @@ describe('BaseRenderer', () => {
     );
   });
 
+  it('render merges Java gateway capability into the project source tree when hasGateway', async () => {
+    mockCopyAndRenderDir.mockResolvedValue(undefined);
+    mkdirSync(join(tmpDir, 'java', 'http', 'spring', 'capabilities', 'gateway'), { recursive: true });
+
+    const renderer = new TestRenderer({ targetLanguage: 'Java', name: 'Agent', hasGateway: true }, 'spring', tmpDir);
+
+    await renderer.render({ outputDir: '/out' });
+
+    expect(mockCopyAndRenderDir).toHaveBeenCalledWith(
+      join(tmpDir, 'java', 'http', 'spring', 'capabilities', 'gateway'),
+      '/out/app/Agent',
+      expect.objectContaining({ projectName: 'Agent', hasGateway: true })
+    );
+  });
+
+  it('render skips gateway capability when hasGateway is false', async () => {
+    mockCopyAndRenderDir.mockResolvedValue(undefined);
+    mkdirSync(join(tmpDir, 'java', 'http', 'spring', 'capabilities', 'gateway'), { recursive: true });
+
+    const renderer = new TestRenderer({ targetLanguage: 'Java', name: 'Agent', hasGateway: false }, 'spring', tmpDir);
+
+    await renderer.render({ outputDir: '/out' });
+
+    // Only the base template renders; the gateway capability dir is not visited.
+    expect(mockCopyAndRenderDir).toHaveBeenCalledTimes(1);
+  });
+
   it('render skips memory capability when dir does not exist', async () => {
     mockCopyAndRenderDir.mockResolvedValue(undefined);
 
