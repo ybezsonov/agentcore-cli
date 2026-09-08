@@ -1,0 +1,3 @@
+# Registers the MEMORY_<NAME>_ID -> agentcore.memory.memory-id bridge so it runs before the memory
+# auto-configuration evaluates its @ConditionalOnProperty gate.
+org.springframework.boot.EnvironmentPostProcessor=com.example.agent.memory.MemoryEnvironmentPostProcessor

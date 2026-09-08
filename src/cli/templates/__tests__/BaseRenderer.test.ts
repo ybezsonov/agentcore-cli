@@ -102,6 +102,23 @@ describe('BaseRenderer', () => {
     );
   });
 
+  it('render merges Java memory capability into the project source tree (not a memory/ subdir)', async () => {
+    mockCopyAndRenderDir.mockResolvedValue(undefined);
+    mkdirSync(join(tmpDir, 'java', 'http', 'spring', 'capabilities', 'memory'), { recursive: true });
+
+    const renderer = new TestRenderer({ targetLanguage: 'Java', name: 'Agent', hasMemory: true }, 'spring', tmpDir);
+
+    await renderer.render({ outputDir: '/out' });
+
+    // Java capabilities carry their own src/main/java/<package>/ path, so they render into
+    // projectDir directly rather than a language-agnostic memory/ subdirectory.
+    expect(mockCopyAndRenderDir).toHaveBeenCalledWith(
+      join(tmpDir, 'java', 'http', 'spring', 'capabilities', 'memory'),
+      '/out/app/Agent',
+      expect.objectContaining({ projectName: 'Agent', hasMemory: true })
+    );
+  });
+
   it('render skips memory capability when dir does not exist', async () => {
     mockCopyAndRenderDir.mockResolvedValue(undefined);
 

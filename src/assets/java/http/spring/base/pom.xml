@@ -69,6 +69,15 @@
             <groupId>org.springaicommunity</groupId>
             <artifactId>spring-ai-agentcore-runtime-starter</artifactId>
         </dependency>
+{{#if hasMemory}}
+
+        <!-- AgentCore short- + long-term memory. The auto-configuration self-gates on
+             agentcore.memory.memory-id, so it stays inert until the runtime injects MEMORY_<NAME>_ID. -->
+        <dependency>
+            <groupId>org.springaicommunity</groupId>
+            <artifactId>spring-ai-agentcore-memory</artifactId>
+        </dependency>
+{{/if}}
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
