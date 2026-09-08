@@ -243,6 +243,22 @@ describe('validate', () => {
       expect(result.error?.includes('only supported for Java')).toBe(true);
     });
 
+    it('accepts --browser for a Java agent', () => {
+      const result = validateAddAgentOptions({
+        ...validAgentOptionsCreate,
+        language: 'Java',
+        framework: 'SpringAI',
+        browser: true,
+      });
+      expect(result.valid).toBe(true);
+    });
+
+    it('rejects --browser for a non-Java agent', () => {
+      const result = validateAddAgentOptions({ ...validAgentOptionsCreate, browser: true });
+      expect(result.valid).toBe(false);
+      expect(result.error?.includes('--browser is only supported for Java')).toBe(true);
+    });
+
     // AC7: Valid options pass
     it('passes for valid options', () => {
       expect(validateAddAgentOptions(validAgentOptionsByo)).toEqual({ valid: true });

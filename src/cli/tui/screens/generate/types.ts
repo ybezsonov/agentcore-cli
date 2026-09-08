@@ -97,6 +97,9 @@ export interface GenerateConfig {
   /** When true, enable the AgentCore code-interpreter tool. Java-only in the create path
    *  (Python enables code-interpreter through the export harness, not the create wizard). */
   codeInterpreter?: boolean;
+  /** When true, enable the AgentCore browser tool. Java-only in the create path. Uses the
+   *  AWS-managed remote browser (agentcore mode) — no local Chromium. Opt-in (adds Playwright). */
+  browser?: boolean;
 }
 
 /** Base steps - apiKey, memory, subnets, securityGroups are conditionally added based on selections */

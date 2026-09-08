@@ -240,6 +240,37 @@ describe('validateCreateOptions', () => {
     expect(result.error).toContain('only supported for Java');
   });
 
+  it('accepts --browser for a Java agent', () => {
+    const result = validateCreateOptions(
+      {
+        name: 'TestProjBrJava',
+        language: 'Java',
+        framework: 'SpringAI',
+        modelProvider: 'Bedrock',
+        memory: 'none',
+        browser: true,
+      },
+      testDir
+    );
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects --browser for a non-Java agent', () => {
+    const result = validateCreateOptions(
+      {
+        name: 'TestProjBrPy',
+        language: 'Python',
+        framework: 'Strands',
+        modelProvider: 'Bedrock',
+        memory: 'none',
+        browser: true,
+      },
+      testDir
+    );
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('--browser is only supported for Java');
+  });
+
   it('accepts lowercase flag values and normalizes them', () => {
     const result = validateCreateOptions(
       { name: 'TestProjLower', language: 'python', framework: 'strands', modelProvider: 'bedrock', memory: 'none' },

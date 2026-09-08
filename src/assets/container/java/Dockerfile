@@ -46,5 +46,13 @@ ENV JAVA_TOOL_OPTIONS="-javaagent:/app/opentelemetry-javaagent.jar" \
     OTEL_LOGS_EXPORTER=none \
     OTEL_SERVICE_NAME={{name}}
 {{/if}}
+{{#if hasBrowser}}
+# AgentCore browser runs in `agentcore` mode by default: it drives the AWS-managed REMOTE browser
+# over CDP, so no local Chromium is needed. Playwright.create() otherwise downloads ~190 MB of
+# Chromium at boot (needs network egress, delays startup) — skip it so the agent boots inert.
+# If you switch to `agentcore.browser.mode=local` (launches Chromium in-container), remove this and
+# install the browser at build time (e.g. `mvn exec:java -e -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install --with-deps chromium"`).
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+{{/if}}
 
 CMD ["java", "-jar", "/app/app.jar"]

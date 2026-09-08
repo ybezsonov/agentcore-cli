@@ -214,6 +214,18 @@ describe('mapGenerateConfigToRenderConfig', () => {
     const result = await mapGenerateConfigToRenderConfig(config, []);
     expect(result.hasCodeInterpreter).toBe(false);
   });
+
+  it('sets hasBrowser true for a Java agent with browser', async () => {
+    const config: GenerateConfig = { ...baseConfig, language: 'Java', sdk: 'SpringAI', browser: true };
+    const result = await mapGenerateConfigToRenderConfig(config, []);
+    expect(result.hasBrowser).toBe(true);
+  });
+
+  it('does not set hasBrowser for a non-Java agent even when browser is set', async () => {
+    const config: GenerateConfig = { ...baseConfig, language: 'Python', browser: true };
+    const result = await mapGenerateConfigToRenderConfig(config, []);
+    expect(result.hasBrowser).toBe(false);
+  });
 });
 
 describe('mapGenerateConfigToAgent - code-interpreter connection', () => {
@@ -231,6 +243,33 @@ describe('mapGenerateConfigToAgent - code-interpreter connection', () => {
 
   it('omits the code-interpreter connection for a non-Java agent even when codeInterpreter is set', () => {
     const config: GenerateConfig = { ...baseConfig, language: 'Python', codeInterpreter: true };
+    const result = mapGenerateConfigToAgent(config);
+    expect(result.connections).toBeUndefined();
+  });
+
+  it('adds the AWS-managed default browser connection for a Java agent with browser', () => {
+    const config: GenerateConfig = { ...baseConfig, language: 'Java', sdk: 'SpringAI', browser: true };
+    const result = mapGenerateConfigToAgent(config);
+    expect(result.connections).toEqual([{ id: 'browser-default', to: { type: 'browser' } }]);
+  });
+
+  it('adds both connections when both code-interpreter and browser are enabled (Java)', () => {
+    const config: GenerateConfig = {
+      ...baseConfig,
+      language: 'Java',
+      sdk: 'SpringAI',
+      codeInterpreter: true,
+      browser: true,
+    };
+    const result = mapGenerateConfigToAgent(config);
+    expect(result.connections).toEqual([
+      { id: 'codeInterpreter-default', to: { type: 'codeInterpreter' } },
+      { id: 'browser-default', to: { type: 'browser' } },
+    ]);
+  });
+
+  it('omits the browser connection for a non-Java agent even when browser is set', () => {
+    const config: GenerateConfig = { ...baseConfig, language: 'Python', browser: true };
     const result = mapGenerateConfigToAgent(config);
     expect(result.connections).toBeUndefined();
   });

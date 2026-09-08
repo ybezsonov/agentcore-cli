@@ -1,6 +1,7 @@
 import { APP_DIR, ConfigIO } from '../../../../lib';
 import type {
   AgentEnvSpec,
+  Connection,
   Credential,
   DirectoryPath,
   FilePath,
@@ -134,6 +135,18 @@ export function mapGenerateConfigToAgent(config: GenerateConfig): AgentEnvSpec {
   // rejected by the runtime. See the tracker / doc 4 for the native-runtime future work.
   const isJava = config.language === 'Java';
 
+  // SDK sandbox tools (code-interpreter, browser) are Java create-path capabilities. Each declares a
+  // connection to its AWS-managed default resource so the CDK grants the runtime role the tool's
+  // bedrock-agentcore IAM at deploy. No `arn` = AWS-managed default (no identifier env var injected);
+  // a custom ARN is an export-harness-only concern (see harness-mapper's BrowserCodeInterpreterResult).
+  const sandboxConnections: Connection[] = [];
+  if (isJava && config.codeInterpreter) {
+    sandboxConnections.push({ id: 'codeInterpreter-default', to: { type: 'codeInterpreter' } });
+  }
+  if (isJava && config.browser) {
+    sandboxConnections.push({ id: 'browser-default', to: { type: 'browser' } });
+  }
+
   return {
     name: config.projectName,
     build: isJava ? 'Container' : (config.buildType ?? 'CodeZip'),
@@ -190,14 +203,7 @@ export function mapGenerateConfigToAgent(config: GenerateConfig): AgentEnvSpec {
       config.s3AccessPoints,
       config.capacityProviderVolumes
     ),
-    // Code-interpreter (Java create path): declare a connection to the AWS-managed default
-    // code-interpreter so the CDK grants the runtime role the bedrock-agentcore code-interpreter
-    // IAM at deploy. No `arn` = AWS-managed default (no identifier env var injected); a custom ARN
-    // is an export-harness-only concern (see harness-mapper's BrowserCodeInterpreterResult).
-    ...(isJava &&
-      config.codeInterpreter && {
-        connections: [{ id: 'codeInterpreter-default', to: { type: 'codeInterpreter' as const } }],
-      }),
+    ...(sandboxConnections.length > 0 && { connections: sandboxConnections }),
     ...(protocol === 'MCP' && { instrumentation: { enableOtel: false } }),
   };
 }
@@ -335,10 +341,11 @@ export async function mapGenerateConfigToRenderConfig(
       }
     })(),
     isVpc: config.networkMode === 'VPC',
-    // Code-interpreter is a Java create-path capability only (Python/TS enable it via the export
-    // harness, not the create wizard). Non-Java requests ignore the flag; create/add validation
-    // rejects --code-interpreter for non-Java so it is never silently dropped.
+    // Code-interpreter and browser are Java create-path capabilities only (Python/TS enable them via
+    // the export harness, not the create wizard). Non-Java requests ignore the flags; create/add
+    // validation rejects them for non-Java so they are never silently dropped.
     hasCodeInterpreter: config.language === 'Java' && !!config.codeInterpreter,
+    hasBrowser: config.language === 'Java' && !!config.browser,
     // Java is container-only, so the renderer must emit the Dockerfile regardless of the --build flag.
     buildType: config.language === 'Java' ? 'Container' : config.buildType,
     memoryProviders:

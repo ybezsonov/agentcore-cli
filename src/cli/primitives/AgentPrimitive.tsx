@@ -130,6 +130,8 @@ export interface AddAgentOptions extends VpcOptions {
   withConfigBundle?: boolean;
   /** Enable the AgentCore code-interpreter tool (Java create path only). */
   codeInterpreter?: boolean;
+  /** Enable the AgentCore browser tool (Java create path only). */
+  browser?: boolean;
 }
 
 /**
@@ -364,6 +366,7 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
       )
       .option('--with-config-bundle', 'Create a config bundle wired into the agent template [non-interactive]')
       .option('--code-interpreter', 'Enable the AgentCore code-interpreter tool (Java only) [non-interactive]')
+      .option('--browser', 'Enable the AgentCore browser tool (Java only) [non-interactive]')
       .option('--json', 'Output as JSON [non-interactive]')
       .action(async options => {
         if (!findConfigRoot()) {
@@ -508,6 +511,7 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
               cpVolumeMountPaths: cliOptions.cpVolumeMountPath ?? [],
               withConfigBundle: cliOptions.withConfigBundle,
               codeInterpreter: cliOptions.codeInterpreter,
+              browser: cliOptions.browser,
             });
 
             if (!result.success) {
@@ -655,6 +659,7 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
       })),
       withConfigBundle: options.withConfigBundle,
       ...(options.codeInterpreter && { codeInterpreter: options.codeInterpreter }),
+      ...(options.browser && { browser: options.browser }),
     };
 
     const agentPath = join(projectRoot, APP_DIR, options.name);

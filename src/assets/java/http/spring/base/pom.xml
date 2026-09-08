@@ -115,6 +115,17 @@
             <artifactId>spring-ai-agentcore-code-interpreter</artifactId>
         </dependency>
 {{/if}}
+{{#if hasBrowser}}
+
+        <!-- AgentCore browser (agentcore mode: the AWS-managed remote browser, driven over CDP — no
+             local Chromium). The autoconfiguration exposes a ToolCallbackProvider the base ChatService
+             picks up automatically; the Playwright bean is lazy, so the app boots inert until the tool
+             is first invoked. Transitively pulls com.microsoft.playwright (client only in this mode). -->
+        <dependency>
+            <groupId>org.springaicommunity</groupId>
+            <artifactId>spring-ai-agentcore-browser</artifactId>
+        </dependency>
+{{/if}}
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

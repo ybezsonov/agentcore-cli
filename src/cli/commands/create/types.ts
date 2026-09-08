@@ -30,6 +30,8 @@ export interface CreateOptions extends VpcOptions {
   withConfigBundle?: boolean;
   /** Enable the AgentCore code-interpreter tool (Java only). */
   codeInterpreter?: boolean;
+  /** Enable the AgentCore browser tool (Java only). */
+  browser?: boolean;
   outputDir?: string;
   skipGit?: boolean;
   skipPythonSetup?: boolean;
