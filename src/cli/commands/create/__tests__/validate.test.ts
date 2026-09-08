@@ -209,6 +209,37 @@ describe('validateCreateOptions', () => {
     expect(result.valid).toBe(true);
   });
 
+  it('accepts --code-interpreter for a Java agent', () => {
+    const result = validateCreateOptions(
+      {
+        name: 'TestProjCiJava',
+        language: 'Java',
+        framework: 'SpringAI',
+        modelProvider: 'Bedrock',
+        memory: 'none',
+        codeInterpreter: true,
+      },
+      testDir
+    );
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects --code-interpreter for a non-Java agent', () => {
+    const result = validateCreateOptions(
+      {
+        name: 'TestProjCiPy',
+        language: 'Python',
+        framework: 'Strands',
+        modelProvider: 'Bedrock',
+        memory: 'none',
+        codeInterpreter: true,
+      },
+      testDir
+    );
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('only supported for Java');
+  });
+
   it('accepts lowercase flag values and normalizes them', () => {
     const result = validateCreateOptions(
       { name: 'TestProjLower', language: 'python', framework: 'strands', modelProvider: 'bedrock', memory: 'none' },

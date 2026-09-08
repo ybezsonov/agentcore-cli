@@ -110,6 +110,7 @@ const AGENT_PATH_FLAGS = [
   'agentAliasId',
   'memory',
   'capacityProvider',
+  'codeInterpreter',
 ] as const;
 
 /** Flags that are harness-only */
@@ -452,6 +453,7 @@ async function handleCreateCLI(options: CreateOptions): Promise<void> {
             capacityProviderConfiguration,
             capacityProviderVolumes: cpVolumePairs.mounts,
             withConfigBundle: options.withConfigBundle,
+            codeInterpreter: options.codeInterpreter,
             skipGit: options.skipGit,
             skipInstall: options.skipInstall,
             skipPythonSetup: options.skipPythonSetup,
@@ -561,6 +563,7 @@ export const registerCreate = (program: Command) => {
       [] as string[]
     )
     .option('--with-config-bundle', 'Create a config bundle wired into the agent template [non-interactive]')
+    .option('--code-interpreter', 'Enable the AgentCore code-interpreter tool (Java only) [non-interactive]')
     .option('--output-dir <dir>', 'Output directory (default: current directory) [non-interactive]')
     .option('--skip-git', 'Skip git repository initialization [non-interactive]')
     .option('--skip-python-setup', 'Skip Python virtual environment setup [non-interactive]')
@@ -614,6 +617,7 @@ export const registerCreate = (program: Command) => {
       cpVolumeName?: string[];
       cpVolumeMountPath?: string[];
       withConfigBundle?: true;
+      codeInterpreter?: true;
       outputDir?: string;
       skipGit?: true;
       skipPythonSetup?: true;
@@ -656,6 +660,7 @@ export const registerCreate = (program: Command) => {
         options.capacityProvider ??
         (options.cpVolumeName?.length ? true : null) ??
         (options.cpVolumeMountPath?.length ? true : null) ??
+        (options.codeInterpreter ? true : null) ??
         options.outputDir ??
         options.skipGit ??
         options.skipPythonSetup ??

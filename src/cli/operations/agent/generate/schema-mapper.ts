@@ -190,6 +190,14 @@ export function mapGenerateConfigToAgent(config: GenerateConfig): AgentEnvSpec {
       config.s3AccessPoints,
       config.capacityProviderVolumes
     ),
+    // Code-interpreter (Java create path): declare a connection to the AWS-managed default
+    // code-interpreter so the CDK grants the runtime role the bedrock-agentcore code-interpreter
+    // IAM at deploy. No `arn` = AWS-managed default (no identifier env var injected); a custom ARN
+    // is an export-harness-only concern (see harness-mapper's BrowserCodeInterpreterResult).
+    ...(isJava &&
+      config.codeInterpreter && {
+        connections: [{ id: 'codeInterpreter-default', to: { type: 'codeInterpreter' as const } }],
+      }),
     ...(protocol === 'MCP' && { instrumentation: { enableOtel: false } }),
   };
 }
@@ -327,6 +335,10 @@ export async function mapGenerateConfigToRenderConfig(
       }
     })(),
     isVpc: config.networkMode === 'VPC',
+    // Code-interpreter is a Java create-path capability only (Python/TS enable it via the export
+    // harness, not the create wizard). Non-Java requests ignore the flag; create/add validation
+    // rejects --code-interpreter for non-Java so it is never silently dropped.
+    hasCodeInterpreter: config.language === 'Java' && !!config.codeInterpreter,
     // Java is container-only, so the renderer must emit the Dockerfile regardless of the --build flag.
     buildType: config.language === 'Java' ? 'Container' : config.buildType,
     memoryProviders:

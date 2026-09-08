@@ -75,6 +75,16 @@ export function validateCreateOptions(options: CreateOptions, cwd?: string): Val
     return { valid: false, error: agentNameResult.error.issues[0]?.message ?? 'Invalid agent name' };
   }
 
+  // Code-interpreter is a Java-only create-path capability (Python/TS enable it via the export
+  // harness, not the create wizard). Reject it for any other language rather than silently dropping
+  // the flag. Checked before the import/MCP early returns so it applies to every path.
+  if (options.codeInterpreter) {
+    const lang = matchEnumValue(TargetLanguageSchema, options.language ?? '') ?? options.language;
+    if (lang !== 'Java') {
+      return { valid: false, error: '--code-interpreter is only supported for Java agents (use --language Java).' };
+    }
+  }
+
   // Import path: validate import-specific options
   if (options.type === 'import') {
     if (!options.agentId) return { valid: false, error: '--agent-id is required for import' };

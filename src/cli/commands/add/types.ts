@@ -46,6 +46,8 @@ export interface AddAgentOptions extends VpcOptions {
   cpVolumeName?: string[];
   cpVolumeMountPath?: string[];
   withConfigBundle?: boolean;
+  /** Enable the AgentCore code-interpreter tool (Java only). */
+  codeInterpreter?: boolean;
   json?: boolean;
 }
 

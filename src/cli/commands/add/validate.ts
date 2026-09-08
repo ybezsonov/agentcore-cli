@@ -101,6 +101,12 @@ export function validateAddAgentOptions(options: AddAgentOptions): ValidationRes
       (matchEnumValue(TargetLanguageSchema, options.language) as typeof options.language) ?? options.language;
   if (options.build) options.build = matchEnumValue(BuildTypeSchema, options.build) ?? options.build;
 
+  // Code-interpreter is a Java-only create-path capability (Python/TS enable it via the export
+  // harness, not `add agent`). Reject it for any other language rather than silently dropping it.
+  if (options.codeInterpreter && options.language !== 'Java') {
+    return { valid: false, error: '--code-interpreter is only supported for Java agents (use --language Java).' };
+  }
+
   // Session storage is not supported for TypeScript agents — reject early before any path-specific returns
   if (options.sessionStorageMountPath && options.language === 'TypeScript') {
     return { valid: false, error: '--session-storage-mount-path is not supported for TypeScript agents' };

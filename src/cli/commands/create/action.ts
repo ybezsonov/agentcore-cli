@@ -158,6 +158,8 @@ export interface CreateWithAgentOptions {
   capacityProviderConfiguration?: CapacityProviderConfiguration;
   capacityProviderVolumes?: CapacityProviderVolumeConfig[];
   withConfigBundle?: boolean;
+  /** Enable the AgentCore code-interpreter tool (Java only). */
+  codeInterpreter?: boolean;
   skipGit?: boolean;
   skipInstall?: boolean;
   skipPythonSetup?: boolean;
@@ -189,6 +191,7 @@ export async function createProjectWithAgent(options: CreateWithAgentOptions): P
     capacityProviderConfiguration,
     capacityProviderVolumes,
     withConfigBundle,
+    codeInterpreter,
     skipGit,
     skipInstall,
     skipPythonSetup,
@@ -296,6 +299,7 @@ export async function createProjectWithAgent(options: CreateWithAgentOptions): P
       ...(capacityProviderConfiguration && { capacityProviderConfiguration }),
       ...(capacityProviderVolumes?.length && { capacityProviderVolumes }),
       ...(withConfigBundle && { withConfigBundle }),
+      ...(codeInterpreter && { codeInterpreter }),
     };
 
     // Resolve credential strategy FIRST (new project has no existing credentials)

@@ -128,6 +128,8 @@ export interface AddAgentOptions extends VpcOptions {
   /** CP volume mount paths (paired by position with cpVolumeNames). */
   cpVolumeMountPaths?: string[];
   withConfigBundle?: boolean;
+  /** Enable the AgentCore code-interpreter tool (Java create path only). */
+  codeInterpreter?: boolean;
 }
 
 /**
@@ -361,6 +363,7 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
         [] as string[]
       )
       .option('--with-config-bundle', 'Create a config bundle wired into the agent template [non-interactive]')
+      .option('--code-interpreter', 'Enable the AgentCore code-interpreter tool (Java only) [non-interactive]')
       .option('--json', 'Output as JSON [non-interactive]')
       .action(async options => {
         if (!findConfigRoot()) {
@@ -504,6 +507,7 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
               cpVolumeNames: cliOptions.cpVolumeName ?? [],
               cpVolumeMountPaths: cliOptions.cpVolumeMountPath ?? [],
               withConfigBundle: cliOptions.withConfigBundle,
+              codeInterpreter: cliOptions.codeInterpreter,
             });
 
             if (!result.success) {
@@ -650,6 +654,7 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
         mountPath: (options.cpVolumeMountPaths ?? [])[i] ?? '',
       })),
       withConfigBundle: options.withConfigBundle,
+      ...(options.codeInterpreter && { codeInterpreter: options.codeInterpreter }),
     };
 
     const agentPath = join(projectRoot, APP_DIR, options.name);

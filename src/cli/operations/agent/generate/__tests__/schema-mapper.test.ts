@@ -194,6 +194,46 @@ describe('mapGenerateConfigToRenderConfig', () => {
     const result = await mapGenerateConfigToRenderConfig(config, []);
     expect(result.memoryProviders[0]!.strategies).toEqual(['SEMANTIC', 'USER_PREFERENCE', 'SUMMARIZATION', 'EPISODIC']);
   });
+
+  it('sets hasCodeInterpreter true for a Java agent with codeInterpreter', async () => {
+    const config: GenerateConfig = { ...baseConfig, language: 'Java', sdk: 'SpringAI', codeInterpreter: true };
+    const result = await mapGenerateConfigToRenderConfig(config, []);
+    expect(result.hasCodeInterpreter).toBe(true);
+  });
+
+  it('leaves hasCodeInterpreter falsy for a Java agent without codeInterpreter', async () => {
+    const config: GenerateConfig = { ...baseConfig, language: 'Java', sdk: 'SpringAI' };
+    const result = await mapGenerateConfigToRenderConfig(config, []);
+    expect(result.hasCodeInterpreter).toBe(false);
+  });
+
+  it('does not set hasCodeInterpreter for a non-Java agent even when codeInterpreter is set', async () => {
+    // code-interpreter is a Java create-path capability only; the flag is ignored for other languages
+    // (create/add validation rejects it, so it can never be silently dropped in practice).
+    const config: GenerateConfig = { ...baseConfig, language: 'Python', codeInterpreter: true };
+    const result = await mapGenerateConfigToRenderConfig(config, []);
+    expect(result.hasCodeInterpreter).toBe(false);
+  });
+});
+
+describe('mapGenerateConfigToAgent - code-interpreter connection', () => {
+  it('adds the AWS-managed default code-interpreter connection for a Java agent with codeInterpreter', () => {
+    const config: GenerateConfig = { ...baseConfig, language: 'Java', sdk: 'SpringAI', codeInterpreter: true };
+    const result = mapGenerateConfigToAgent(config);
+    expect(result.connections).toEqual([{ id: 'codeInterpreter-default', to: { type: 'codeInterpreter' } }]);
+  });
+
+  it('omits connections for a Java agent without codeInterpreter', () => {
+    const config: GenerateConfig = { ...baseConfig, language: 'Java', sdk: 'SpringAI' };
+    const result = mapGenerateConfigToAgent(config);
+    expect(result.connections).toBeUndefined();
+  });
+
+  it('omits the code-interpreter connection for a non-Java agent even when codeInterpreter is set', () => {
+    const config: GenerateConfig = { ...baseConfig, language: 'Python', codeInterpreter: true };
+    const result = mapGenerateConfigToAgent(config);
+    expect(result.connections).toBeUndefined();
+  });
 });
 
 describe('mapGenerateConfigToAgent protocol mode', () => {

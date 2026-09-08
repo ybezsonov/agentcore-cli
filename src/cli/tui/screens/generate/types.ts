@@ -94,6 +94,9 @@ export interface GenerateConfig {
   capacityProviderVolumes?: CapacityProviderVolumeConfig[];
   /** When true, create a config bundle wired into the agent template */
   withConfigBundle?: boolean;
+  /** When true, enable the AgentCore code-interpreter tool. Java-only in the create path
+   *  (Python enables code-interpreter through the export harness, not the create wizard). */
+  codeInterpreter?: boolean;
 }
 
 /** Base steps - apiKey, memory, subnets, securityGroups are conditionally added based on selections */

@@ -226,6 +226,23 @@ describe('validate', () => {
       expect(result.error?.includes('Invalid memory option')).toBeTruthy();
     });
 
+    // Code-interpreter is Java-only on the create path
+    it('accepts --code-interpreter for a Java agent', () => {
+      const result = validateAddAgentOptions({
+        ...validAgentOptionsCreate,
+        language: 'Java',
+        framework: 'SpringAI',
+        codeInterpreter: true,
+      });
+      expect(result.valid).toBe(true);
+    });
+
+    it('rejects --code-interpreter for a non-Java agent', () => {
+      const result = validateAddAgentOptions({ ...validAgentOptionsCreate, codeInterpreter: true });
+      expect(result.valid).toBe(false);
+      expect(result.error?.includes('only supported for Java')).toBe(true);
+    });
+
     // AC7: Valid options pass
     it('passes for valid options', () => {
       expect(validateAddAgentOptions(validAgentOptionsByo)).toEqual({ valid: true });

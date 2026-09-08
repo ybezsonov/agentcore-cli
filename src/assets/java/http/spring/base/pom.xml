@@ -105,6 +105,16 @@
             <artifactId>regions</artifactId>
         </dependency>
 {{/if}}
+{{#if hasCodeInterpreter}}
+
+        <!-- AgentCore code interpreter (sandboxed code execution). The autoconfiguration exposes a
+             ToolCallbackProvider that the base ChatService picks up automatically; the underlying
+             BedrockAgentCoreClient is lazy, so the app boots inert until the tool is first invoked. -->
+        <dependency>
+            <groupId>org.springaicommunity</groupId>
+            <artifactId>spring-ai-agentcore-code-interpreter</artifactId>
+        </dependency>
+{{/if}}
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -28,6 +28,8 @@ export interface CreateOptions extends VpcOptions {
   cpVolumeName?: string[];
   cpVolumeMountPath?: string[];
   withConfigBundle?: boolean;
+  /** Enable the AgentCore code-interpreter tool (Java only). */
+  codeInterpreter?: boolean;
   outputDir?: string;
   skipGit?: boolean;
   skipPythonSetup?: boolean;
