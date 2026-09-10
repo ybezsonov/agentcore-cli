@@ -10,6 +10,7 @@ import {
   invokeAgentRuntime,
   invokeAgentRuntimeStreaming,
   invokeAguiRuntime,
+  isSSEResponse,
   mcpCallTool,
   mcpInitSession,
   mcpListTools,
@@ -226,7 +227,7 @@ export async function handleInvoke(context: InvokeContext, options: InvokeOption
     // the caller renders as-is.
     const responseBody = isMcpGateway
       ? responseText
-      : responseText.includes('data: ')
+      : isSSEResponse(responseText)
         ? parseSSE(responseText)
         : extractResult(responseText);
 

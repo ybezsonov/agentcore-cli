@@ -2,6 +2,7 @@ import {
   buildBearerInvokeHeaders,
   buildInvokePayload,
   extractResult,
+  isSSEResponse,
   parseA2AResponse,
   parseSSE,
   parseSSELine,
@@ -102,6 +103,26 @@ describe('parseSSE', () => {
 
   it('does not drop chunks that lack a space after "data:"', () => {
     expect(parseSSELine('data:Code').content).toBe('Code');
+  });
+});
+
+describe('isSSEResponse', () => {
+  it('detects SSE with a cosmetic space after data:', () => {
+    expect(isSSEResponse('data: "hello"\n')).toBe(true);
+  });
+
+  // Regression: Spring/Java emit `data:<token>` with NO space. A response whose tokens never start
+  // with a space (e.g. a fenced code block from the code-interpreter tool) must still be recognized
+  // as SSE — otherwise it falls through to extractResult and renders raw `data:`-prefixed frames.
+  it('detects SSE when no line has a space after data: (Spring code-block output)', () => {
+    const codeBlock = 'data:```\ndata:2d914171391146cb\ndata:328b59\ndata:```\n';
+    expect(isSSEResponse(codeBlock)).toBe(true);
+    // and the parser renders it cleanly (no data: prefixes leak through)
+    expect(parseSSE(codeBlock)).toBe('```2d914171391146cb328b59```');
+  });
+
+  it('returns false for a plain JSON envelope', () => {
+    expect(isSSEResponse('{"result":"answer"}')).toBe(false);
   });
 });
 

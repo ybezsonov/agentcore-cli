@@ -290,8 +290,10 @@ export async function invokeAgent(portOrOptions: number | InvokeOptions, message
         return '(empty response)';
       }
 
-      // Check if it's SSE format (streaming response)
-      if (text.includes('data: ')) {
+      // Check if it's SSE format (streaming response). Match `data:` without a trailing space —
+      // Spring/Java runtimes emit no cosmetic space (see parseSSELine); requiring `data: ` made
+      // space-less responses (e.g. a code block) fall through to extractResult and render raw.
+      if (text.includes('data:')) {
         return parseSSE(text);
       }
 

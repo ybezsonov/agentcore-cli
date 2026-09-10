@@ -162,6 +162,21 @@ export function parseSSE(text: string): string {
 }
 
 /**
+ * True when a runtime response is SSE (streaming) rather than a plain JSON envelope, so the caller
+ * runs parseSSE instead of extractResult.
+ *
+ * Tests for `data:` WITHOUT a trailing space: Spring/Java runtimes emit spec-compliant SSE with no
+ * cosmetic space (`data:<token>`), matching parseSSELine's slice(5) contract. Requiring `data: `
+ * made responses whose tokens never start with a space (e.g. a fenced code block) skip parseSSE and
+ * fall to extractResult, whose JSON.parse throws on SSE and returns the raw `data:`-prefixed frames.
+ * TODO(java-rfc Q2): the SSE consumer (this + parseSSELine) is duplicated across the invoke paths;
+ * dedupe into one shared util.
+ */
+export function isSSEResponse(text: string): boolean {
+  return text.includes('data:');
+}
+
+/**
  * Extract result from a JSON response object.
  * Handles both {"result": "..."} and plain text responses.
  */
@@ -348,7 +363,7 @@ async function invokeWithBearerToken(options: InvokeAgentRuntimeOptions): Promis
 
   const sessionId = res.headers.get('X-Amzn-Bedrock-AgentCore-Runtime-Session-Id') ?? undefined;
   const text = await res.text();
-  const content = text.includes('data: ') ? parseSSE(text) : extractResult(text);
+  const content = isSSEResponse(text) ? parseSSE(text) : extractResult(text);
 
   return { content, sessionId };
 }
@@ -484,7 +499,7 @@ export async function invokeAgentRuntime(options: InvokeAgentRuntimeOptions): Pr
   const text = new TextDecoder().decode(bytes);
 
   // Parse SSE format if present
-  const content = text.includes('data: ') ? parseSSE(text) : extractResult(text);
+  const content = isSSEResponse(text) ? parseSSE(text) : extractResult(text);
 
   return {
     content,
