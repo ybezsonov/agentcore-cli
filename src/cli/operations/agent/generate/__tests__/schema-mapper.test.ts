@@ -226,6 +226,27 @@ describe('mapGenerateConfigToRenderConfig', () => {
     const result = await mapGenerateConfigToRenderConfig(config, []);
     expect(result.hasBrowser).toBe(false);
   });
+
+  it('leaves modelApiKeyRef undefined for a Bedrock Java agent (IAM auth, no credential)', async () => {
+    const config: GenerateConfig = { ...baseConfig, language: 'Java', sdk: 'SpringAI', modelProvider: 'Bedrock' };
+    const result = await mapGenerateConfigToRenderConfig(config, []);
+    expect(result.modelApiKeyRef).toBeUndefined();
+  });
+
+  it('sets modelApiKeyRef to the Spring env placeholder for a non-Bedrock Java agent', async () => {
+    const config: GenerateConfig = { ...baseConfig, language: 'Java', sdk: 'SpringAI', modelProvider: 'OpenAI' };
+    const identityProviders = [{ name: 'TestProjectOpenAI', envVarName: 'AGENTCORE_CREDENTIAL_TESTPROJECTOPENAI' }];
+    const result = await mapGenerateConfigToRenderConfig(config, identityProviders);
+    expect(result.modelApiKeyRef).toBe('${AGENTCORE_CREDENTIAL_TESTPROJECTOPENAI:not-configured}');
+  });
+
+  it('does not set modelApiKeyRef for a non-Java agent even when a credential exists', async () => {
+    // The placeholder is consumed only by the Java template; other languages read the key their own way.
+    const config: GenerateConfig = { ...baseConfig, language: 'Python', modelProvider: 'OpenAI' };
+    const identityProviders = [{ name: 'TestProjectOpenAI', envVarName: 'AGENTCORE_CREDENTIAL_TESTPROJECTOPENAI' }];
+    const result = await mapGenerateConfigToRenderConfig(config, identityProviders);
+    expect(result.modelApiKeyRef).toBeUndefined();
+  });
 });
 
 describe('mapGenerateConfigToAgent - code-interpreter connection', () => {

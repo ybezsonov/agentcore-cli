@@ -319,11 +319,25 @@ export async function mapGenerateConfigToRenderConfig(
   const gatewayProviders = isMcp ? [] : await mapGatewaysToGatewayProviders();
   const enableOtel = !isMcp && config.language !== 'TypeScript';
 
+  // For a non-Bedrock Java model provider, precompute the Spring property placeholder for the API key
+  // as `${<CREDENTIAL_ENV_VAR>:not-configured}`: the real key resolves from the AgentCore credential
+  // env var at deploy, and locally (no env var) it falls back to the non-empty sentinel so the app
+  // still boots. A non-empty default (not `${...:}`) is deliberate — some Spring AI model starters
+  // fail-fast at boot on an empty key (e.g. google-genai's com.google.genai.Client asserts an api-key
+  // is present), so an empty default would break inert local boot; a placeholder key lets the client
+  // construct lazily and only 401 on the first request. Precomputed here to avoid the `${` + `{{ }}`
+  // brace clash of inlining the env var name in a Spring placeholder in the template. Bedrock (IAM, no
+  // credential) and non-Java languages leave it undefined.
+  const credentialEnvVarName = identityProviders[0]?.envVarName;
+  const modelApiKeyRef =
+    config.language === 'Java' && credentialEnvVarName ? `\${${credentialEnvVarName}:not-configured}` : undefined;
+
   return {
     name: config.projectName,
     sdkFramework: config.sdk,
     targetLanguage: config.language,
     modelProvider: config.modelProvider,
+    ...(modelApiKeyRef && { modelApiKeyRef }),
     hasMemory:
       isMcp || (config.language === 'TypeScript' && config.sdk !== 'Strands')
         ? false

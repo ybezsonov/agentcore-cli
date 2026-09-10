@@ -58,11 +58,34 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+{{#if (eq modelProvider "Bedrock")}}
         <!-- Bedrock Converse chat model -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-bedrock-converse</artifactId>
         </dependency>
+{{/if}}
+{{#if (eq modelProvider "OpenAI")}}
+        <!-- OpenAI chat model (API key from the AgentCore credential env var; version from spring-ai-bom) -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
+        </dependency>
+{{/if}}
+{{#if (eq modelProvider "Anthropic")}}
+        <!-- Anthropic (Claude) chat model (API key from the AgentCore credential env var; version from spring-ai-bom) -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-anthropic</artifactId>
+        </dependency>
+{{/if}}
+{{#if (eq modelProvider "Gemini")}}
+        <!-- Google Gemini chat model — Gemini Developer API (API key from the AgentCore credential env var; version from spring-ai-bom) -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-google-genai</artifactId>
+        </dependency>
+{{/if}}
 
         <!-- AgentCore Runtime contract (/invocations + /ping, SSE, @AgentCoreInvocation) -->
         <dependency>

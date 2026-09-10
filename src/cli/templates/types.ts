@@ -60,6 +60,17 @@ export interface AgentRenderConfig {
   sdkFramework: SDKFramework;
   targetLanguage: TargetLanguage;
   modelProvider: ModelProvider;
+  /**
+   * Spring property placeholder for a non-Bedrock model provider's API key, precomputed as
+   * `${<CREDENTIAL_ENV_VAR>:not-configured}`. The Java template emits this verbatim into
+   * `spring.ai.<provider>.api-key`, so the key resolves from the AgentCore credential env var at
+   * deploy and falls back to the non-empty sentinel locally so the app still boots (the key is read
+   * only on the first request; a non-empty default is required because some starters, e.g.
+   * google-genai, fail-fast on an empty key at boot). Precomputed to sidestep the `${` + `{{ }}`
+   * brace clash of inlining the env var name in a Spring placeholder. Undefined for Bedrock (IAM
+   * auth, no API key) and for non-Java languages.
+   */
+  modelApiKeyRef?: string;
   hasMemory: boolean;
   hasIdentity: boolean;
   hasGateway: boolean;
