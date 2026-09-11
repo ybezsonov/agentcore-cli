@@ -3,6 +3,7 @@ import { ValidationError } from '../../../lib/errors/types';
 import {
   BROWSER_ARN_PATTERN,
   CODE_INTERPRETER_ARN_PATTERN,
+  DEFAULT_ENTRYPOINT_BY_LANGUAGE,
   connectionEnvToken,
   connectionIdForTarget,
   resourceIdFromArn,
@@ -52,13 +53,17 @@ import {
   CONTAINER_URI_NOTE_CATEGORY,
   GATEWAY_GRANT_TYPE_NOTE_CATEGORY,
   GIT_SKILLS_CONTAINER_NOTE_CATEGORY,
+  JAVA_UNSUPPORTED_FEATURES_NOTE_CATEGORY,
   LITELLM_NO_API_KEY_NOTE_CATEGORY,
   MALFORMED_S3_SKILL_NOTE_CATEGORY,
   MALFORMED_TOOL_ARN_NOTE_CATEGORY,
   MCP_HEADER_CREDS_NOTE_CATEGORY,
   PATH_SKILLS_NOTE_CATEGORY,
 } from './constants';
-import type { ExportNote, HarnessMappingResult, ResolvedHarnessContext } from './types';
+import type { ExportLanguageConfig, ExportNote, HarnessMappingResult, ResolvedHarnessContext } from './types';
+
+/** Default export target: Python/Strands — preserves the pre-Java behaviour when no language is given. */
+const DEFAULT_EXPORT_LANGUAGE: ExportLanguageConfig = { targetLanguage: 'Python', sdkFramework: 'Strands' };
 
 // ============================================================================
 // Public entry point
@@ -66,11 +71,17 @@ import type { ExportNote, HarnessMappingResult, ResolvedHarnessContext } from '.
 
 export function mapHarnessToExportConfig(
   context: ResolvedHarnessContext,
-  buildOverride?: BuildType
+  buildOverride?: BuildType,
+  langConfig: ExportLanguageConfig = DEFAULT_EXPORT_LANGUAGE
 ): HarnessMappingResult {
   const { spec, targetAgentName } = context;
+  const isJava = langConfig.targetLanguage === 'Java';
 
-  const buildType = resolveBuildType(spec, buildOverride);
+  // Java is container-only (no managed Java CodeZip runtime yet): force Container regardless of the
+  // --build flag / spec, matching the create path (schema-mapper's `isJava` branch). The Java-support
+  // guard below rejects the combinations Java export can't yet honour before any config is built.
+  if (isJava) assertJavaExportSupported(spec, buildOverride);
+  const buildType: BuildType = isJava ? 'Container' : resolveBuildType(spec, buildOverride);
 
   if (buildType === 'CodeZip' && (spec.containerUri || spec.dockerfile)) {
     const what = spec.containerUri ? `containerUri (${spec.containerUri})` : `dockerfile (${spec.dockerfile})`;
@@ -238,9 +249,15 @@ export function mapHarnessToExportConfig(
 
   const renderConfig: AgentRenderConfig = {
     name: targetAgentName,
-    sdkFramework: 'Strands',
-    targetLanguage: 'Python',
+    sdkFramework: langConfig.sdkFramework,
+    targetLanguage: langConfig.targetLanguage,
     modelProvider,
+    // Java non-Bedrock API key: the Spring property placeholder ${<CRED_ENV>:not-configured} (the
+    // non-empty sentinel keeps google-genai from fail-fasting at boot on an empty key — see RFC Q11).
+    // Bedrock (IAM, no key) and all non-Java targets leave this undefined.
+    ...(isJava && identityResult.provider
+      ? { modelApiKeyRef: `\${${identityResult.provider.envVarName}:not-configured}` }
+      : {}),
     hasMemory: memoryResult.providers.length > 0,
     hasIdentity: identityResult.provider !== null,
     hasGateway,
@@ -293,12 +310,17 @@ export function mapHarnessToExportConfig(
     actorId: spec.memory?.mode === 'existing' ? spec.memory.actorId : undefined,
   };
 
+  // Java (Phase A/H1) renders model + system prompt + memory/gateway(AWS_IAM) + default sandbox tools.
+  // Any other harness feature present in the render config is not yet consumed by the Java templates,
+  // so flag it in one consolidated note rather than dropping it silently.
+  if (isJava) pushJavaCoverageNotes(renderConfig, context);
+
   const connections = [
     ...(memoryResult.connections ?? []),
     ...(gatewayResult.connections ?? []),
     ...toolResult.connections,
   ];
-  const agentEnvSpec = buildAgentEnvSpec(context, targetAgentName, buildType, connections);
+  const agentEnvSpec = buildAgentEnvSpec(context, targetAgentName, buildType, connections, isJava);
 
   // Private git skills reference an API-key credential provider for clone auth. Persist a name-only
   // credential entry per distinct provider so the deployed agent's role is granted GetResourceApiKey
@@ -405,7 +427,8 @@ function buildAgentEnvSpec(
   context: ResolvedHarnessContext,
   targetAgentName: string,
   buildType: BuildType,
-  connections: Connection[] = []
+  connections: Connection[] = [],
+  isJava = false
 ): AgentEnvSpec {
   const { spec } = context;
   const codeLocation = `${APP_DIR}/${targetAgentName}/` as DirectoryPath;
@@ -416,9 +439,13 @@ function buildAgentEnvSpec(
     name: targetAgentName,
     build: buildType,
     ...(resolveDockerfileName(spec, buildType) && { dockerfile: resolveDockerfileName(spec, buildType)! as FilePath }),
-    entrypoint: DEFAULT_PYTHON_ENTRYPOINT as FilePath,
+    // Java: emit the same entrypoint as the create path (the AgentApplication.java path) and OMIT
+    // runtimeVersion — Java is container-only, the Dockerfile controls the JDK, and a JAVA_* runtime
+    // version is rejected. (The `.java` entrypoint is still rejected at CDK synth today → the deploy
+    // workaround is to swap it to a main.py placeholder; RFC Q7, shared with the create path.)
+    entrypoint: (isJava ? DEFAULT_ENTRYPOINT_BY_LANGUAGE.Java : DEFAULT_PYTHON_ENTRYPOINT) as FilePath,
     codeLocation,
-    runtimeVersion: DEFAULT_PYTHON_VERSION,
+    ...(isJava ? {} : { runtimeVersion: DEFAULT_PYTHON_VERSION }),
     networkMode: spec.networkMode ?? 'PUBLIC',
     protocol: 'HTTP',
     ...(spec.networkMode === 'VPC' && spec.networkConfig && { networkConfig: spec.networkConfig }),
@@ -935,6 +962,75 @@ function resolveRemoteMcpTools(
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/**
+ * Reject the harness/language combinations Java export cannot yet honour, with a clear pointer to the
+ * deferred slice, rather than emitting a scaffold that fails at docker-build or deploy. Phase A (H1)
+ * supports container-only Java agents whose model is Bedrock (Converse) / OpenAI / Gemini; the
+ * excluded cases are tracked in doc 7's Phase B.
+ */
+function assertJavaExportSupported(spec: HarnessSpec, buildOverride?: BuildType): void {
+  if (buildOverride === 'CodeZip') {
+    throw new ValidationError(
+      'Java agents are container-only (there is no managed Java CodeZip runtime). ' +
+        'Re-export without `--build CodeZip` (Container is used automatically).'
+    );
+  }
+  if (spec.containerUri || spec.dockerfile) {
+    const what = spec.containerUri ? `containerUri (${spec.containerUri})` : `dockerfile (${spec.dockerfile})`;
+    throw new ValidationError(
+      `Java export of a container-image harness (${what}) is not yet supported — the Java agent ships ` +
+        `its own Maven Dockerfile. Track: harness/export Phase B. Export this harness as Python for now, ` +
+        `or drop the ${spec.containerUri ? 'containerUri' : 'dockerfile'}.`
+    );
+  }
+  if (spec.model.provider === 'lite_llm' || isBedrockMantleModel(spec)) {
+    const which = spec.model.provider === 'lite_llm' ? 'LiteLLM' : 'Bedrock Mantle (OpenAI-compatible)';
+    throw new ValidationError(
+      `Java export does not yet support the ${which} model provider (model "${spec.model.modelId}"). ` +
+        `Java supports Bedrock (Converse), OpenAI, and Gemini today; ${which} is tracked in harness/export ` +
+        `Phase B. Export this harness as Python, or switch the harness to a supported model.`
+    );
+  }
+}
+
+/**
+ * Emit one consolidated export note listing the harness features present in the resolved render
+ * config that the Java/Spring templates do not yet consume (so the user is not surprised that a
+ * skill, inline tool, execution limit, etc. silently vanished). Each entry names the tracked slice.
+ */
+function pushJavaCoverageNotes(renderConfig: AgentRenderConfig, context: ResolvedHarnessContext): void {
+  const gaps: string[] = [];
+  const skillCount =
+    (renderConfig.pathSkills?.length ?? 0) +
+    (renderConfig.s3Skills?.length ?? 0) +
+    (renderConfig.gitSkills?.length ?? 0);
+  if (skillCount > 0) gaps.push(`skills (${skillCount}): path/s3/git skill loading — harness/export Phase B (B3)`);
+  if (renderConfig.inlineFunctionTools?.length)
+    gaps.push(`inline function tools (${renderConfig.inlineFunctionTools.length}) — Phase B (B2)`);
+  if (renderConfig.remoteMcpTools?.length)
+    gaps.push(`remote (non-gateway) MCP tools (${renderConfig.remoteMcpTools.length}) — Phase A (H3)`);
+  if (renderConfig.hasExecutionLimits)
+    gaps.push('execution limits (maxIterations / maxTokens / timeoutSeconds) — Phase A (H5) + B1');
+  if (renderConfig.truncationStrategy && renderConfig.truncationStrategy !== 'none')
+    gaps.push(`truncation (${renderConfig.truncationStrategy}) — Phase A (H4) + B4`);
+  if (renderConfig.hasShell || renderConfig.hasFileOperations)
+    gaps.push('builtin shell / file_operations tools — Phase B (B6)');
+  if (renderConfig.gatewayProviders.some(g => g.authType !== 'AWS_IAM'))
+    gaps.push('gateway auth other than AWS_IAM (CUSTOM_JWT / NONE) — Phase B');
+  if (renderConfig.browserIdentifierEnvVar || renderConfig.codeInterpreterIdentifierEnvVar)
+    gaps.push('custom browser / code-interpreter identifier (falls back to the AWS-managed default until Phase A H2)');
+  if (gaps.length === 0) return;
+
+  context.exportNotes.push({
+    category: JAVA_UNSUPPORTED_FEATURES_NOTE_CATEGORY,
+    message:
+      'The exported Java/Spring agent does not yet wire the following harness features, so they were ' +
+      'omitted from the generated agent:\n\n' +
+      gaps.map(g => `  • ${g}`).join('\n') +
+      '\n\nExport this harness as Python for full feature coverage until these Java slices land.',
+  });
+}
 
 function resolveBuildType(spec: HarnessSpec, override?: BuildType): BuildType {
   if (override) return override;

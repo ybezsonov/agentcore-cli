@@ -37,6 +37,28 @@ Handlebars.registerHelper('escapePyStr', (value: unknown) => {
   const s = typeof value === 'string' ? value : '';
   return new Handlebars.SafeString(s.replace(/\\/g, '\\\\').replace(/"""/g, '\\"\\"\\"'));
 });
+// Emits a Spring `${MODEL_ID:<id>}` property reference where <id> is the given model id, or the
+// fallback when it is empty/absent. Built in a helper (not inline in the template) because a literal
+// `${MODEL_ID:{{modelId}}}` would put a `}}}` next to the mustache close, which Handlebars misparses
+// as a triple/unescaped close. Returns a SafeString; use it inside a `{{{ }}}` triple-stache.
+Handlebars.registerHelper('modelRef', (modelId: unknown, fallback: unknown) => {
+  const id = typeof modelId === 'string' && modelId.length > 0 ? modelId : String(fallback);
+  return new Handlebars.SafeString('${MODEL_ID:' + id + '}');
+});
+// Escapes a string for use as a single-line Java .properties VALUE: backslash first, then the
+// whitespace control chars to their \n/\r/\t/\f escapes so a multi-line value (e.g. an exported
+// harness system prompt) stays on one line and round-trips through java.util.Properties. Returns a
+// SafeString so Handlebars does not HTML-escape prompt characters like & < > " '.
+Handlebars.registerHelper('escapeProps', (value: unknown) => {
+  const s = typeof value === 'string' ? value : '';
+  const escaped = s
+    .replace(/\\/g, '\\\\')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/\t/g, '\\t')
+    .replace(/\f/g, '\\f');
+  return new Handlebars.SafeString(escaped);
+});
 Handlebars.registerHelper('some', (array: unknown[], key: string) => {
   if (!Array.isArray(array)) return false;
   return array.some(

@@ -1,7 +1,7 @@
 import { AgentAlreadyExistsError, ConfigIO, setEnvVar } from '../../../lib';
 import { ExportHarnessError, ValidationError } from '../../../lib/errors/types';
-import { AgentNameSchema } from '../../../schema';
-import type { AgentEnvSpec, BuildType, Credential, HarnessSpec } from '../../../schema';
+import { AgentNameSchema, SDKFrameworkSchema, TargetLanguageSchema, matchEnumValue } from '../../../schema';
+import type { AgentEnvSpec, BuildType, Credential, HarnessSpec, SDKFramework, TargetLanguage } from '../../../schema';
 import { getErrorMessage } from '../../errors';
 import { regionFromHarnessArn } from '../../operations/harness/orphan';
 import type { AttributeRecorder } from '../../telemetry/cli-command-run.js';
@@ -12,7 +12,7 @@ import {
   ModelProvider as TelemetryModelProvider,
   standardize,
 } from '../../telemetry/schemas/common-shapes.js';
-import { StrandsRenderer } from '../../templates/StrandsRenderer';
+import { createRenderer } from '../../templates';
 import {
   CUSTOM_DOCKERFILE_NOTE_CATEGORY,
   EXPORT_NOTES_FILENAME,
@@ -22,13 +22,46 @@ import {
 import { fetchHarnessSpecByArn } from './fetch-harness-spec';
 import { isPathSkill, mapHarnessToExportConfig } from './harness-mapper';
 import { resolveHarnessContext } from './harness-resolver';
-import type { ExportHarnessOptions, ExportNote, ResolvedHarnessContext } from './types';
+import type { ExportHarnessOptions, ExportLanguageConfig, ExportNote, ResolvedHarnessContext } from './types';
 import { execSync } from 'node:child_process';
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, isAbsolute, join, resolve, sep } from 'node:path';
 
 export interface ExportHarnessProgress {
   onProgress?: (message: string) => void;
+}
+
+/**
+ * Resolve + validate the export target language/framework from the CLI flags. Defaults to
+ * Python/Strands (the pre-Java behaviour); Java defaults to SpringAI. Harness export supports exactly
+ * these two language→framework pairs today, so anything else is a fixable user error, not a crash.
+ */
+function resolveExportLanguageConfig(
+  options: ExportHarnessOptions
+): { config: ExportLanguageConfig } | { error: ValidationError } {
+  let targetLanguage: TargetLanguage = 'Python';
+  if (options.language) {
+    const matched = matchEnumValue(TargetLanguageSchema, options.language);
+    if (matched !== 'Python' && matched !== 'Java') {
+      return {
+        error: new ValidationError(
+          `Unsupported --language "${options.language}". Harness export supports: Python, Java.`
+        ),
+      };
+    }
+    targetLanguage = matched as TargetLanguage;
+  }
+
+  const defaultFramework: SDKFramework = targetLanguage === 'Java' ? 'SpringAI' : 'Strands';
+  if (options.framework && matchEnumValue(SDKFrameworkSchema, options.framework) !== defaultFramework) {
+    return {
+      error: new ValidationError(
+        `Unsupported --framework "${options.framework}" for ${targetLanguage}. Expected ${defaultFramework}.`
+      ),
+    };
+  }
+
+  return { config: { targetLanguage, sdkFramework: defaultFramework } };
 }
 
 export async function handleExportHarness(
@@ -59,6 +92,11 @@ export async function handleExportHarness(
           error: new ValidationError(`Invalid --build value "${buildOverride}". Expected CodeZip or Container.`),
         };
       }
+
+      const langResult = resolveExportLanguageConfig(options);
+      if ('error' in langResult) return { success: false as const, error: langResult.error };
+      const langConfig = langResult.config;
+      const isJava = langConfig.targetLanguage === 'Java';
 
       // For --arn, fetch the harness from the service first so we can derive its name. The fetch
       // needs a region — taken from the project's first deployment target.
@@ -104,9 +142,9 @@ export async function handleExportHarness(
       }
 
       // 2. Map harness spec to render config + agent env spec
-      log('Mapping to Strands template config');
+      log(`Mapping to ${langConfig.sdkFramework} template config`);
       const { renderConfig, agentEnvSpec, credentialEntry, mcpCredentialEntries, gitCredentialEntries } =
-        mapHarnessToExportConfig(context, buildOverride);
+        mapHarnessToExportConfig(context, buildOverride, langConfig);
 
       // The target directory is guaranteed not to pre-exist (resolveHarnessContext throws if it
       // does), so anything written below is created by this export. Remove it on failure to avoid
@@ -153,7 +191,7 @@ export async function handleExportHarness(
       //     unresolvable paths (absolute, traversal, or not found) are assumed to live in the base
       //     image and get a verify-note instead. (Container only — CodeZip path skills are unsupported
       //     and already noted by the mapper.)
-      if (!context.spec.dockerfile && renderConfig.buildType === 'Container') {
+      if (!isJava && !context.spec.dockerfile && renderConfig.buildType === 'Container') {
         const harnessDir = join(context.projectRoot, 'app', harnessName);
         const copied: string[] = [];
         const unresolved: string[] = [];
@@ -187,10 +225,10 @@ export async function handleExportHarness(
         writeDockerfileStub(agentDir, context.spec.containerUri);
       }
 
-      // 5. Render Strands agent code
+      // 5. Render agent code (createRenderer dispatches on sdkFramework: Strands→Python, SpringAI→Java)
       log('Rendering agent code');
       try {
-        const renderer = new StrandsRenderer(renderConfig);
+        const renderer = createRenderer(renderConfig);
         await renderer.render({ outputDir: context.projectRoot });
       } catch (err) {
         cleanupAgentDir();
@@ -205,8 +243,9 @@ export async function handleExportHarness(
         };
       }
 
-      // 5b. Generate uv.lock for Container builds (required by the Dockerfile's uv sync step)
-      if (renderConfig.buildType === 'Container') {
+      // 5b. Generate uv.lock for Container builds (required by the Dockerfile's uv sync step). Java
+      //     builds with Maven inside its own Dockerfile — no uv.lock.
+      if (renderConfig.buildType === 'Container' && !isJava) {
         log('Generating uv.lock for container build');
         try {
           execSync('uv lock', { cwd: agentDir, stdio: 'pipe' });
@@ -257,7 +296,7 @@ export async function handleExportHarness(
 
       // 7. Write EXPORT_NOTES.md
       log('Writing EXPORT_NOTES.md');
-      writeExportNotes(context.exportNotes, harnessName, targetAgentName, agentDir);
+      writeExportNotes(context.exportNotes, harnessName, targetAgentName, agentDir, langConfig);
 
       // Record telemetry attrs after all work is done
       recorder.set({
@@ -444,14 +483,25 @@ function readStrandsVersion(agentDir: string): string {
   }
 }
 
-function writeExportNotes(notes: ExportNote[], harnessName: string, agentName: string, agentDir: string): void {
+function writeExportNotes(
+  notes: ExportNote[],
+  harnessName: string,
+  agentName: string,
+  agentDir: string,
+  langConfig: ExportLanguageConfig
+): void {
   const today = new Date().toISOString().split('T')[0];
-  const strandsVersion = readStrandsVersion(agentDir);
+  // Python reports the resolved strands-agents version from pyproject.toml; Java has no equivalent
+  // pin here (the Spring AI / agentcore versions live in pom.xml), so just name the framework.
+  const frameworkLine =
+    langConfig.targetLanguage === 'Java'
+      ? `Framework: ${langConfig.sdkFramework} (Java, container-only)`
+      : `Strands version: ${readStrandsVersion(agentDir)}`;
   const lines: string[] = [
     `# Export Notes — ${harnessName} → ${agentName}`,
     '',
     `Exported on: ${today}`,
-    `Strands version: ${strandsVersion}`,
+    frameworkLine,
     `Source harness: agentcore/app/${harnessName}/harness.json`,
     `Generated agent: app/${agentName}/`,
     '',

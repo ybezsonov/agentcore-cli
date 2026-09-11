@@ -7,6 +7,7 @@ import {
   CONTAINER_URI_NOTE_CATEGORY,
   GATEWAY_GRANT_TYPE_NOTE_CATEGORY,
   GIT_SKILLS_CONTAINER_NOTE_CATEGORY,
+  JAVA_UNSUPPORTED_FEATURES_NOTE_CATEGORY,
   LITELLM_NO_API_KEY_NOTE_CATEGORY,
   MALFORMED_S3_SKILL_NOTE_CATEGORY,
   MALFORMED_TOOL_ARN_NOTE_CATEGORY,
@@ -1283,5 +1284,149 @@ describe('isBuiltinIncluded (shell / file_operations)', () => {
     const ctx = baseContext({ allowedTools: ['shell'] });
     const { renderConfig } = mapHarnessToExportConfig(ctx, 'CodeZip');
     expect(renderConfig.hasShell).toBe(false);
+  });
+});
+
+// ============================================================================
+// Java / SpringAI export (roadmap item 6, Phase A / H1)
+// ============================================================================
+
+describe('Java / SpringAI export', () => {
+  const JAVA = { targetLanguage: 'Java', sdkFramework: 'SpringAI' } as const;
+  // A token-vault API-key ARN → the identity resolver derives the credential name from its last segment.
+  const OPENAI_KEY_ARN =
+    'arn:aws:bedrock-agentcore:us-east-1:123456789012:token-vault/default/apikeycredentialprovider/mykey';
+
+  it('defaults to Python/Strands when no language config is passed', () => {
+    const { renderConfig, agentEnvSpec } = mapHarnessToExportConfig(baseContext());
+    expect(renderConfig.targetLanguage).toBe('Python');
+    expect(renderConfig.sdkFramework).toBe('Strands');
+    expect(agentEnvSpec.runtimeVersion).toBeDefined();
+  });
+
+  it('renders a container-only Bedrock Java agent (Container, .java entrypoint, no runtimeVersion)', () => {
+    const { renderConfig, agentEnvSpec } = mapHarnessToExportConfig(
+      baseContext({ model: { provider: 'bedrock', modelId: 'us.amazon.nova-pro-v1:0' } }),
+      undefined,
+      JAVA
+    );
+    expect(renderConfig.targetLanguage).toBe('Java');
+    expect(renderConfig.sdkFramework).toBe('SpringAI');
+    expect(renderConfig.modelProvider).toBe('Bedrock');
+    expect(renderConfig.buildType).toBe('Container');
+    expect(renderConfig.modelId).toBe('us.amazon.nova-pro-v1:0');
+    // Bedrock authenticates via IAM — no API-key placeholder.
+    expect(renderConfig.modelApiKeyRef).toBeUndefined();
+    expect(agentEnvSpec.build).toBe('Container');
+    expect(agentEnvSpec.entrypoint).toMatch(/AgentApplication\.java$/);
+    expect(agentEnvSpec.runtimeVersion).toBeUndefined();
+  });
+
+  it('threads the harness system prompt into the render config for Java', () => {
+    const ctx = baseContext({}, { systemPrompt: 'You are a payroll expert.' });
+    const { renderConfig } = mapHarnessToExportConfig(ctx, undefined, JAVA);
+    expect(renderConfig.systemPromptText).toBe('You are a payroll expert.');
+  });
+
+  it('computes the non-empty API-key sentinel for a non-Bedrock Java model', () => {
+    const { renderConfig } = mapHarnessToExportConfig(
+      baseContext({ model: { provider: 'open_ai', modelId: 'gpt-4.1', apiKeyArn: OPENAI_KEY_ARN } }),
+      undefined,
+      JAVA
+    );
+    expect(renderConfig.modelProvider).toBe('OpenAI');
+    expect(renderConfig.modelApiKeyRef).toMatch(/^\$\{.+:not-configured\}$/);
+  });
+
+  it('carries an existing-memory flag through to the Java render config', () => {
+    const ctx = baseContext(
+      { memory: { mode: 'existing', name: 'chatmem' } },
+      {
+        projectSpec: {
+          name: 'p',
+          runtimes: [],
+          memories: [{ name: 'chatmem', strategies: [] }],
+          credentials: [],
+          harnesses: [],
+        } as any,
+      }
+    );
+    const { renderConfig } = mapHarnessToExportConfig(ctx, undefined, JAVA);
+    expect(renderConfig.hasMemory).toBe(true);
+  });
+
+  it('rejects --build CodeZip for Java (container-only)', () => {
+    expect(() => mapHarnessToExportConfig(baseContext(), 'CodeZip', JAVA)).toThrow(/container-only/i);
+  });
+
+  it('rejects a container-image (containerUri) harness for Java (Phase B)', () => {
+    expect(() =>
+      mapHarnessToExportConfig(
+        baseContext({ containerUri: '123456789012.dkr.ecr.us-east-1.amazonaws.com/base:latest' }),
+        undefined,
+        JAVA
+      )
+    ).toThrow(/not yet supported/i);
+  });
+
+  it('rejects a LiteLLM model for Java (Phase B)', () => {
+    expect(() =>
+      mapHarnessToExportConfig(
+        baseContext({ model: { provider: 'lite_llm', modelId: 'openai/gpt-4o' } }),
+        undefined,
+        JAVA
+      )
+    ).toThrow(/LiteLLM/i);
+  });
+
+  it('rejects a Bedrock Mantle (OpenAI-compatible) model for Java (Phase B)', () => {
+    expect(() =>
+      mapHarnessToExportConfig(
+        baseContext({ model: { provider: 'bedrock', modelId: 'openai.gpt-oss-120b', apiFormat: 'chat_completions' } }),
+        undefined,
+        JAVA
+      )
+    ).toThrow(/Mantle/i);
+  });
+
+  it('emits one consolidated note for harness features not yet wired in Java', () => {
+    const ctx = baseContext({
+      skills: [{ path: 'skills/local' }],
+      tools: [
+        {
+          type: 'inline_function',
+          name: 'lookup',
+          config: { inlineFunction: { description: 'Look something up', inputSchema: { type: 'object' } } },
+        },
+      ],
+      maxIterations: 5,
+      truncation: { strategy: 'sliding_window', config: { slidingWindow: { messagesCount: 20 } } },
+    });
+    const { renderConfig } = mapHarnessToExportConfig(ctx, undefined, JAVA);
+    const note = ctx.exportNotes.find(n => n.category === JAVA_UNSUPPORTED_FEATURES_NOTE_CATEGORY);
+    expect(note).toBeDefined();
+    expect(note!.message).toMatch(/skills/);
+    expect(note!.message).toMatch(/inline function tools/);
+    expect(note!.message).toMatch(/execution limits/);
+    expect(note!.message).toMatch(/truncation/);
+    // Sanity: the features are still parsed into the render config (they are dropped at render, not here).
+    expect(renderConfig.hasExecutionLimits).toBe(true);
+  });
+
+  it('emits no Java-coverage note for a plain Bedrock harness with no unwired features', () => {
+    // A non-wildcard allowlist that names no builtins keeps shell/file_operations out (a wildcard
+    // harness exposes those Strands builtins by default, which Java does not wire — so that case
+    // correctly DOES get a coverage note).
+    const ctx = baseContext({ allowedTools: ['my-tool'] });
+    mapHarnessToExportConfig(ctx, undefined, JAVA);
+    expect(noteCategories(ctx)).not.toContain(JAVA_UNSUPPORTED_FEATURES_NOTE_CATEGORY);
+  });
+
+  it('flags the default Strands builtins (shell/file_operations) as unwired in Java', () => {
+    const ctx = baseContext(); // wildcard allowedTools → builtins available in the harness
+    mapHarnessToExportConfig(ctx, undefined, JAVA);
+    const note = ctx.exportNotes.find(n => n.category === JAVA_UNSUPPORTED_FEATURES_NOTE_CATEGORY);
+    expect(note).toBeDefined();
+    expect(note!.message).toMatch(/shell/);
   });
 });

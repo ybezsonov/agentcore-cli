@@ -1,4 +1,11 @@
-import type { AgentCoreProjectSpec, Credential, DeployedResourceState, HarnessSpec } from '../../../schema';
+import type {
+  AgentCoreProjectSpec,
+  Credential,
+  DeployedResourceState,
+  HarnessSpec,
+  SDKFramework,
+  TargetLanguage,
+} from '../../../schema';
 import type {
   AgentRenderConfig,
   GatewayProviderRenderConfig,
@@ -16,7 +23,26 @@ export interface ExportHarnessOptions {
   arn?: string;
   targetAgentName?: string;
   build?: string;
+  /** Target language for the exported agent. Defaults to Python. */
+  language?: string;
+  /** SDK framework for the exported agent. Defaults to Strands (Python) / SpringAI (Java). */
+  framework?: string;
   json?: boolean;
+}
+
+// ============================================================================
+// Resolved language/framework (validated, defaulted) — threaded into the mapper
+// ============================================================================
+
+/**
+ * The validated target language + framework for an export. Python/Strands is the default and
+ * preserves the pre-existing behaviour; Java/SpringAI routes rendering through SpringRenderer and
+ * the container-only Java agent-env spec. Kept separate from the on-disk `ResolvedHarnessContext`
+ * so `resolveHarnessContext` (all disk reads) stays language-agnostic.
+ */
+export interface ExportLanguageConfig {
+  targetLanguage: TargetLanguage;
+  sdkFramework: SDKFramework;
 }
 
 // ============================================================================

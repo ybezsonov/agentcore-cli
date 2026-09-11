@@ -18,3 +18,5 @@ export const AWS_SKILLS_NOTE_CATEGORY = 'AWS skills omitted — not available ou
 export const MALFORMED_TOOL_ARN_NOTE_CATEGORY = 'Browser/code-interpreter ARN is malformed — using AWS-managed default';
 export const MALFORMED_S3_SKILL_NOTE_CATEGORY = 'S3 skill URI is malformed — no S3 read permission generated';
 export const LITELLM_NO_API_KEY_NOTE_CATEGORY = 'LiteLLM model may require an API key';
+export const JAVA_UNSUPPORTED_FEATURES_NOTE_CATEGORY =
+  'Java export: some harness features are not yet wired (dropped from the generated agent)';
