@@ -1460,4 +1460,57 @@ describe('Java / SpringAI export', () => {
     expect(renderConfig.hasCodeInterpreter).toBe(true);
     expect(renderConfig.codeInterpreterIdentifierEnvVar).toMatch(/^CODE_INTERPRETER_.*_ID$/);
   });
+
+  // H3 — remote (non-gateway) MCP tools
+  it('wires a URL-only remote MCP server for Java (hasMcpClient, no header auth) (H3)', () => {
+    const ctx = baseContext({
+      allowedTools: ['weather'],
+      tools: [{ type: 'remote_mcp', name: 'weather', config: { remoteMcp: { url: 'https://mcp.example.com/mcp' } } }],
+    });
+    const { renderConfig } = mapHarnessToExportConfig(ctx, undefined, JAVA);
+    expect(renderConfig.hasMcpClient).toBe(true);
+    expect(renderConfig.remoteMcpTools).toHaveLength(1);
+    expect(renderConfig.remoteMcpTools![0].url).toBe('https://mcp.example.com/mcp');
+    expect(renderConfig.hasRemoteMcpHeaderAuth).toBe(false);
+    const note = ctx.exportNotes.find(n => n.category === JAVA_UNSUPPORTED_FEATURES_NOTE_CATEGORY);
+    expect(note?.message ?? '').not.toMatch(/remote/i);
+  });
+
+  it('wires header credentials for a remote MCP server for Java (H3)', () => {
+    const ctx = baseContext({
+      allowedTools: ['secure'],
+      tools: [
+        {
+          type: 'remote_mcp',
+          name: 'secure',
+          config: { remoteMcp: { url: 'https://mcp.example.com/mcp', headers: { 'X-Api-Key': 'sk-123' } } },
+        },
+      ],
+    });
+    const { renderConfig } = mapHarnessToExportConfig(ctx, undefined, JAVA);
+    expect(renderConfig.hasMcpClient).toBe(true);
+    expect(renderConfig.hasRemoteMcpHeaderAuth).toBe(true);
+    const cred = renderConfig.remoteMcpTools![0].headerCredentials?.[0];
+    expect(cred?.headerKey).toBe('X-Api-Key');
+    expect(cred?.envVarName).toMatch(/^AGENTCORE_CREDENTIAL_/);
+  });
+
+  it('sets hasMcpClient (no header auth) when only a gateway is present', () => {
+    const ctx = baseContext({
+      allowedTools: ['gw'],
+      tools: [
+        {
+          type: 'agentcore_gateway',
+          name: 'gw',
+          config: {
+            agentCoreGateway: { gatewayArn: 'arn:aws:bedrock-agentcore:us-east-1:123456789012:gateway/abc123' },
+          },
+        },
+      ],
+    });
+    const { renderConfig } = mapHarnessToExportConfig(ctx, undefined, JAVA);
+    expect(renderConfig.hasGateway).toBe(true);
+    expect(renderConfig.hasMcpClient).toBe(true);
+    expect(renderConfig.hasRemoteMcpHeaderAuth).toBe(false);
+  });
 });

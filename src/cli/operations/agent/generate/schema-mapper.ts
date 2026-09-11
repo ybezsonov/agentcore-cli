@@ -346,6 +346,10 @@ export async function mapGenerateConfigToRenderConfig(
           : config.memory !== 'none',
     hasIdentity: isMcp ? false : identityProviders.length > 0,
     hasGateway: gatewayProviders.length > 0,
+    // (Java) the shared MCP client is needed whenever a gateway is present. The create path has no
+    // remote (non-gateway) MCP servers — those come from the export harness only — so on this path
+    // hasMcpClient tracks hasGateway. Keeps the Java pom MCP deps + client properties gated correctly.
+    hasMcpClient: gatewayProviders.length > 0,
     hasPayment: await (async () => {
       try {
         const spec = await new ConfigIO().readProjectSpec();

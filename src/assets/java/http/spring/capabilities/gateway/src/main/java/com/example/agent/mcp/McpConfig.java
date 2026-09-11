@@ -1,5 +1,6 @@
 package com.example.agent.mcp;
 
+import java.util.HashSet;
 import java.util.Set;
 
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
@@ -23,6 +24,11 @@ import software.amazon.awssdk.regions.providers.AwsRegionProvider;
  * {@code bedrock-agentcore}), for AWS_IAM-authorized gateways. Active only when an MCP gateway
  * connection is configured ({@code spring.ai.mcp.client.enabled=true}, set by
  * {@code GatewayEnvironmentPostProcessor} once a gateway URL is injected at deploy).
+ *
+ * <p>The customizer is scoped to the <em>gateway</em> connection names only: an agent may also carry
+ * remote (non-gateway) MCP server connections whose auth is static headers (see RemoteMcpConfig), and
+ * every {@code McpClientCustomizer} bean is invoked for every connection — so SigV4 must not be
+ * applied to a remote MCP connection that expects a bearer/API-key header instead.
  */
 @Configuration
 @ConditionalOnProperty(name = "spring.ai.mcp.client.enabled", havingValue = "true")
@@ -30,6 +36,15 @@ public class McpConfig {
 
     private static final Logger log = LoggerFactory.getLogger(McpConfig.class);
     private static final Set<String> RESTRICTED_HEADERS = Set.of("content-length", "host", "expect");
+
+    // The gateway connection names this SigV4 customizer signs for (name-contract with the connection
+    // URLs GatewayEnvironmentPostProcessor registers). Other connections (remote MCP) are left alone.
+    private static final Set<String> GATEWAY_CONNECTIONS = new HashSet<>();
+    static {
+{{#each gatewayProviders}}
+        GATEWAY_CONNECTIONS.add("{{name}}");
+{{/each}}
+    }
 
     @Bean
     McpClientCustomizer<HttpClientStreamableHttpTransport.Builder> sigV4RequestCustomizer(
@@ -67,7 +82,9 @@ public class McpConfig {
         };
 
         return (name, transportBuilder) -> {
-            transportBuilder.httpRequestCustomizer(requestCustomizer);
+            if (GATEWAY_CONNECTIONS.contains(name)) {
+                transportBuilder.httpRequestCustomizer(requestCustomizer);
+            }
         };
     }
 }

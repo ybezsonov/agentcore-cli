@@ -91,6 +91,18 @@ export abstract class BaseRenderer {
       }
     }
 
+    // Remote (non-gateway) MCP header-auth capability (Java export only). URL-only remote MCP servers
+    // are wired purely via application.properties + the shared MCP client; only servers with header
+    // credentials need the RemoteMcpConfig customizer, so this renders solely when header auth exists.
+    // Python/TS ship no capabilities/remote-mcp dir (existsSync skips them); its files live under
+    // src/main/java/<package>/ and merge into the project source, so they render into projectDir.
+    if (this.config.hasRemoteMcpHeaderAuth) {
+      const remoteMcpCapabilityDir = path.join(templateDir, 'capabilities', 'remote-mcp');
+      if (existsSync(remoteMcpCapabilityDir)) {
+        await copyAndRenderDir(remoteMcpCapabilityDir, projectDir, templateData);
+      }
+    }
+
     if (this.shouldRenderPayment()) {
       const paymentCapabilityDir = path.join(templateDir, 'capabilities', 'payments');
       if (existsSync(paymentCapabilityDir)) {

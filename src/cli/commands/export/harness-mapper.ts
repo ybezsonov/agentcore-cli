@@ -281,6 +281,10 @@ export function mapHarnessToExportConfig(
     truncationConfig: resolveTruncationConfig(spec.truncation),
     // Remote MCP tools — consumed by mcp_client template
     remoteMcpTools: mcpResolution.tools,
+    // (Java) MCP client is needed for a gateway and/or any remote MCP server; header auth (RemoteMcpConfig)
+    // only when a remote server declares header credentials.
+    hasMcpClient: hasGateway || mcpResolution.tools.length > 0,
+    hasRemoteMcpHeaderAuth: mcpResolution.tools.some(t => (t.headerCredentials?.length ?? 0) > 0),
     // Filesystem mounts (session storage, EFS, S3) — consumed by main.py/CDK templates
     ...buildFilesystemRenderConfig(spec),
     // Skills (path/s3/git) — consumed by main.py + skills/fetcher.py templates
@@ -1008,8 +1012,8 @@ function pushJavaCoverageNotes(renderConfig: AgentRenderConfig, context: Resolve
   if (skillCount > 0) gaps.push(`skills (${skillCount}): path/s3/git skill loading — harness/export Phase B (B3)`);
   if (renderConfig.inlineFunctionTools?.length)
     gaps.push(`inline function tools (${renderConfig.inlineFunctionTools.length}) — Phase B (B2)`);
-  if (renderConfig.remoteMcpTools?.length)
-    gaps.push(`remote (non-gateway) MCP tools (${renderConfig.remoteMcpTools.length}) — Phase A (H3)`);
+  // Note: remote (non-gateway) MCP tools ARE wired (H3) — URLs in application.properties + a
+  // name-scoped header customizer (RemoteMcpConfig) for header-auth servers.
   if (renderConfig.hasExecutionLimits)
     gaps.push('execution limits (maxIterations / maxTokens / timeoutSeconds) — Phase A (H5) + B1');
   if (renderConfig.truncationStrategy && renderConfig.truncationStrategy !== 'none')

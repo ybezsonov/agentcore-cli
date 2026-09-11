@@ -124,6 +124,12 @@ export interface AgentRenderConfig {
     url: string;
     headerCredentials?: { headerKey: string; credentialName: string; envVarName: string }[];
   }[];
+  /** (Java) True when the Spring AI MCP client is needed — an AgentCore Gateway (hasGateway) and/or
+   *  one or more remote MCP servers. Gates the MCP client deps + the shared client properties. */
+  hasMcpClient?: boolean;
+  /** (Java) True when at least one remote MCP server declares header credentials — renders the
+   *  RemoteMcpConfig header customizer. URL-only remote servers need no capability code. */
+  hasRemoteMcpHeaderAuth?: boolean;
 
   /** Skill paths for AgentSkills plugin */
   pathSkills?: string[];
