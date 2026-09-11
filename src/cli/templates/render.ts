@@ -45,6 +45,13 @@ Handlebars.registerHelper('modelRef', (modelId: unknown, fallback: unknown) => {
   const id = typeof modelId === 'string' && modelId.length > 0 ? modelId : String(fallback);
   return new Handlebars.SafeString('${MODEL_ID:' + id + '}');
 });
+// Emits a Spring `${<ENV_VAR>:<fallback>}` property reference for a runtime-injected env var with a
+// literal fallback. Like modelRef, this is a helper (not inline) because `${{{envVar}}:...}` would put
+// `{{{` / `}}}` next to the mustache and Handlebars would misparse it as a triple-stache. Returns a
+// SafeString; use inside a `{{{ }}}` triple-stache.
+Handlebars.registerHelper('envRef', (envVarName: unknown, fallback: unknown) => {
+  return new Handlebars.SafeString('${' + String(envVarName) + ':' + String(fallback) + '}');
+});
 // Escapes a string for use as a single-line Java .properties VALUE: backslash first, then the
 // whitespace control chars to their \n/\r/\t/\f escapes so a multi-line value (e.g. an exported
 // harness system prompt) stays on one line and round-trips through java.util.Properties. Returns a

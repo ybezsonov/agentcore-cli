@@ -1429,4 +1429,35 @@ describe('Java / SpringAI export', () => {
     expect(note).toBeDefined();
     expect(note!.message).toMatch(/shell/);
   });
+
+  // H2 — browser / code-interpreter custom-ARN identifier
+  it('wires a custom browser identifier for Java and no longer flags it as unwired (H2)', () => {
+    const arn = 'arn:aws:bedrock-agentcore:us-east-1:123456789012:browser-custom/my_browser_id';
+    const ctx = baseContext({
+      allowedTools: ['browser'],
+      tools: [{ type: 'agentcore_browser', name: 'browser', config: { agentCoreBrowser: { browserArn: arn } } }],
+    });
+    const { renderConfig } = mapHarnessToExportConfig(ctx, undefined, JAVA);
+    expect(renderConfig.hasBrowser).toBe(true);
+    expect(renderConfig.browserIdentifierEnvVar).toMatch(/^BROWSER_.*_ID$/);
+    const note = ctx.exportNotes.find(n => n.category === JAVA_UNSUPPORTED_FEATURES_NOTE_CATEGORY);
+    expect(note?.message ?? '').not.toMatch(/identifier/);
+  });
+
+  it('wires a custom code-interpreter identifier for Java (H2)', () => {
+    const arn = 'arn:aws:bedrock-agentcore:us-east-1:123456789012:code-interpreter-custom/my_ci_id';
+    const ctx = baseContext({
+      allowedTools: ['ci'],
+      tools: [
+        {
+          type: 'agentcore_code_interpreter',
+          name: 'ci',
+          config: { agentCoreCodeInterpreter: { codeInterpreterArn: arn } },
+        },
+      ],
+    });
+    const { renderConfig } = mapHarnessToExportConfig(ctx, undefined, JAVA);
+    expect(renderConfig.hasCodeInterpreter).toBe(true);
+    expect(renderConfig.codeInterpreterIdentifierEnvVar).toMatch(/^CODE_INTERPRETER_.*_ID$/);
+  });
 });

@@ -1018,8 +1018,8 @@ function pushJavaCoverageNotes(renderConfig: AgentRenderConfig, context: Resolve
     gaps.push('builtin shell / file_operations tools — Phase B (B6)');
   if (renderConfig.gatewayProviders.some(g => g.authType !== 'AWS_IAM'))
     gaps.push('gateway auth other than AWS_IAM (CUSTOM_JWT / NONE) — Phase B');
-  if (renderConfig.browserIdentifierEnvVar || renderConfig.codeInterpreterIdentifierEnvVar)
-    gaps.push('custom browser / code-interpreter identifier (falls back to the AWS-managed default until Phase A H2)');
+  // Note: custom browser/code-interpreter identifiers ARE wired (H2) via
+  // agentcore.browser.browser-identifier / agentcore.code-interpreter.code-interpreter-identifier.
   if (gaps.length === 0) return;
 
   context.exportNotes.push({
