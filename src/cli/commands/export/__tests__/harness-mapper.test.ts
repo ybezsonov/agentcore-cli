@@ -1407,7 +1407,7 @@ describe('Java / SpringAI export', () => {
     expect(note).toBeDefined();
     expect(note!.message).toMatch(/skills/);
     expect(note!.message).toMatch(/inline function tools/);
-    expect(note!.message).toMatch(/execution limits/);
+    expect(note!.message).toMatch(/maxTokens \/ maxIterations/);
     expect(note!.message).toMatch(/truncation/);
     // Sanity: the features are still parsed into the render config (they are dropped at render, not here).
     expect(renderConfig.hasExecutionLimits).toBe(true);
@@ -1512,5 +1512,27 @@ describe('Java / SpringAI export', () => {
     expect(renderConfig.hasGateway).toBe(true);
     expect(renderConfig.hasMcpClient).toBe(true);
     expect(renderConfig.hasRemoteMcpHeaderAuth).toBe(false);
+  });
+
+  // H5 — execution limits (timeout wired; token/iteration budgets deferred to Phase B)
+  it('threads timeoutSeconds and does not flag it as unwired (H5)', () => {
+    const ctx = baseContext({ allowedTools: ['t'], timeoutSeconds: 30 });
+    const { renderConfig } = mapHarnessToExportConfig(ctx, undefined, JAVA);
+    expect(renderConfig.timeoutSeconds).toBe(30);
+    expect(renderConfig.hasExecutionLimits).toBe(true);
+    // No token/iteration budget → no execution-limit coverage note at all here.
+    const note = ctx.exportNotes.find(n => n.category === JAVA_UNSUPPORTED_FEATURES_NOTE_CATEGORY);
+    expect(note).toBeUndefined();
+  });
+
+  it('flags maxTokens / maxIterations budgets as unwired while timeout is wired (H5)', () => {
+    const ctx = baseContext({ allowedTools: ['t'], timeoutSeconds: 30, maxTokens: 1000, maxIterations: 5 });
+    const { renderConfig } = mapHarnessToExportConfig(ctx, undefined, JAVA);
+    expect(renderConfig.timeoutSeconds).toBe(30);
+    expect(renderConfig.maxTokens).toBe(1000);
+    const note = ctx.exportNotes.find(n => n.category === JAVA_UNSUPPORTED_FEATURES_NOTE_CATEGORY);
+    expect(note).toBeDefined();
+    expect(note!.message).toMatch(/maxTokens \/ maxIterations/);
+    expect(note!.message).toMatch(/timeout IS wired/);
   });
 });

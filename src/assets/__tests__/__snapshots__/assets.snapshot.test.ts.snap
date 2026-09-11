@@ -830,6 +830,8 @@ exports[`Assets Directory Snapshots > File listing > should match the expected f
   "java/http/spring/base/src/main/java/com/example/agent/ConversationIdProvider.java",
   "java/http/spring/base/src/main/java/com/example/agent/CoreConfig.java",
   "java/http/spring/base/src/main/resources/application.properties",
+  "java/http/spring/capabilities/execution-limits/src/main/java/com/example/agent/limits/ExecutionLimitsConfig.java",
+  "java/http/spring/capabilities/execution-limits/src/main/java/com/example/agent/limits/TimeoutAdvisor.java",
   "java/http/spring/capabilities/gateway/src/main/java/com/example/agent/mcp/GatewayEnvironmentPostProcessor.java",
   "java/http/spring/capabilities/gateway/src/main/java/com/example/agent/mcp/McpConfig.java",
   "java/http/spring/capabilities/gateway/src/main/resources/META-INF/spring.factories",

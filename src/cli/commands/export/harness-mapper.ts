@@ -1014,10 +1014,12 @@ function pushJavaCoverageNotes(renderConfig: AgentRenderConfig, context: Resolve
     gaps.push(`inline function tools (${renderConfig.inlineFunctionTools.length}) — Phase B (B2)`);
   // Note: remote (non-gateway) MCP tools ARE wired (H3) — URLs in application.properties + a
   // name-scoped header customizer (RemoteMcpConfig) for header-auth servers.
-  if (renderConfig.hasExecutionLimits)
-    gaps.push('execution limits (maxIterations / maxTokens / timeoutSeconds) — Phase A (H5) + B1');
+  // timeoutSeconds IS wired (H5 — a Flux.timeout advisor); only the token/iteration budgets need the
+  // Spring AI tool-loop introspection that is still a Phase B follow-up.
+  if (renderConfig.maxTokens !== undefined || renderConfig.maxIterations !== undefined)
+    gaps.push('execution-limit budgets maxTokens / maxIterations (timeout IS wired) — Phase B');
   if (renderConfig.truncationStrategy && renderConfig.truncationStrategy !== 'none')
-    gaps.push(`truncation (${renderConfig.truncationStrategy}) — Phase A (H4) + B4`);
+    gaps.push(`truncation (${renderConfig.truncationStrategy}) — Phase B (AgentCore SDK 2.2 Session API)`);
   if (renderConfig.hasShell || renderConfig.hasFileOperations)
     gaps.push('builtin shell / file_operations tools — Phase B (B6)');
   if (renderConfig.gatewayProviders.some(g => g.authType !== 'AWS_IAM'))
