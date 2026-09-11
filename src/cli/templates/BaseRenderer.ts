@@ -103,6 +103,17 @@ export abstract class BaseRenderer {
       }
     }
 
+    // Truncation → AgentCore Session API read-window (Java export only, SDK 2.2+). Memory-backed, so
+    // the mapper only sets hasSessionTruncation when the agent also has memory. Renders a small EPP
+    // that enables the session when the memory id is present. Python/TS ship no capabilities/truncation
+    // dir (existsSync skips them); its files live under src/main/java/<package>/ → render into projectDir.
+    if (this.config.hasSessionTruncation) {
+      const truncationCapabilityDir = path.join(templateDir, 'capabilities', 'truncation');
+      if (existsSync(truncationCapabilityDir)) {
+        await copyAndRenderDir(truncationCapabilityDir, projectDir, templateData);
+      }
+    }
+
     if (this.shouldRenderPayment()) {
       const paymentCapabilityDir = path.join(templateDir, 'capabilities', 'payments');
       if (existsSync(paymentCapabilityDir)) {

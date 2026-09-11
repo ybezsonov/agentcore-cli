@@ -840,6 +840,8 @@ exports[`Assets Directory Snapshots > File listing > should match the expected f
   "java/http/spring/capabilities/memory/src/main/java/com/example/agent/memory/MemoryEnvironmentPostProcessor.java",
   "java/http/spring/capabilities/memory/src/main/resources/META-INF/spring.factories",
   "java/http/spring/capabilities/remote-mcp/src/main/java/com/example/agent/mcp/RemoteMcpConfig.java",
+  "java/http/spring/capabilities/truncation/src/main/java/com/example/agent/truncation/TruncationEnvironmentPostProcessor.java",
+  "java/http/spring/capabilities/truncation/src/main/resources/META-INF/spring.factories",
   "mcp/python-lambda/README.md",
   "mcp/python-lambda/handler.py",
   "mcp/python-lambda/pyproject.toml",

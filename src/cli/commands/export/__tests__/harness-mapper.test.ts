@@ -1535,4 +1535,55 @@ describe('Java / SpringAI export', () => {
     expect(note!.message).toMatch(/maxTokens \/ maxIterations/);
     expect(note!.message).toMatch(/timeout IS wired/);
   });
+
+  // B4 — truncation via the AgentCore Session API (SDK 2.2), memory-backed
+  const memCtx = (specOverrides: Partial<HarnessSpec>) =>
+    baseContext(
+      { allowedTools: ['t'], memory: { mode: 'existing', name: 'mem' }, ...specOverrides },
+      {
+        projectSpec: {
+          name: 'p',
+          runtimes: [],
+          memories: [{ name: 'mem', strategies: [] }],
+          credentials: [],
+          harnesses: [],
+        } as any,
+      }
+    );
+
+  it('maps sliding_window truncation to the Session API read-window when memory is present (B4)', () => {
+    const ctx = memCtx({
+      truncation: { strategy: 'sliding_window', config: { slidingWindow: { messagesCount: 20 } } },
+    });
+    const { renderConfig } = mapHarnessToExportConfig(ctx, undefined, JAVA);
+    expect(renderConfig.hasMemory).toBe(true);
+    expect(renderConfig.hasSessionTruncation).toBe(true);
+    expect(renderConfig.sessionTotalEventsLimit).toBe(20);
+    const note = ctx.exportNotes.find(n => n.category === JAVA_UNSUPPORTED_FEATURES_NOTE_CATEGORY);
+    expect(note!.message).toMatch(/Session API/);
+    expect(note!.message).toMatch(/2\.2\.0/);
+  });
+
+  it('maps summarization truncation to the Session API window via preserveRecentMessages (B4)', () => {
+    const ctx = memCtx({
+      truncation: {
+        strategy: 'summarization',
+        config: { summarization: { preserveRecentMessages: 8, summaryRatio: 0.3 } },
+      },
+    });
+    const { renderConfig } = mapHarnessToExportConfig(ctx, undefined, JAVA);
+    expect(renderConfig.hasSessionTruncation).toBe(true);
+    expect(renderConfig.sessionTotalEventsLimit).toBe(8);
+  });
+
+  it('does NOT wire truncation without memory (Session API is memory-backed) and notes it (B4)', () => {
+    const ctx = baseContext({
+      allowedTools: ['t'],
+      truncation: { strategy: 'sliding_window', config: { slidingWindow: { messagesCount: 20 } } },
+    });
+    const { renderConfig } = mapHarnessToExportConfig(ctx, undefined, JAVA);
+    expect(renderConfig.hasSessionTruncation).toBeFalsy();
+    const note = ctx.exportNotes.find(n => n.category === JAVA_UNSUPPORTED_FEATURES_NOTE_CATEGORY);
+    expect(note!.message).toMatch(/ignored.*no memory/);
+  });
 });

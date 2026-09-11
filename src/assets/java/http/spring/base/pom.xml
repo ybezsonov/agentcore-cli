@@ -101,6 +101,17 @@
             <artifactId>spring-ai-agentcore-memory</artifactId>
         </dependency>
 {{/if}}
+{{#if hasSessionTruncation}}
+
+        <!-- AgentCore Session API (harness truncation → read-windowing). The memory module wires the
+             SessionMemoryAdvisor from this artifact; TruncationEnvironmentPostProcessor enables the
+             session (+ total-events-limit) only when a memory id is injected, so boot stays inert.
+             REQUIRES spring-ai-agentcore 2.2.0+ — bump spring-ai-agentcore-bom above to 2.2.0. -->
+        <dependency>
+            <groupId>org.springaicommunity</groupId>
+            <artifactId>spring-ai-session-management</artifactId>
+        </dependency>
+{{/if}}
 {{#if hasMcpClient}}
 
         <!-- MCP client (streamable HTTP) — shared by AgentCore Gateway tools and remote (non-gateway)

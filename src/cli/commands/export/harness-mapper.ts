@@ -279,6 +279,8 @@ export function mapHarnessToExportConfig(
     // Truncation — consumed by main.py template
     truncationStrategy: spec.truncation?.strategy,
     truncationConfig: resolveTruncationConfig(spec.truncation),
+    // (Java, SDK 2.2 Session API) Truncation → session read-windowing; memory-backed, so gated on memory.
+    ...buildSessionTruncationRenderConfig(spec, isJava, memoryResult.providers.length > 0),
     // Remote MCP tools — consumed by mcp_client template
     remoteMcpTools: mcpResolution.tools,
     // (Java) MCP client is needed for a gateway and/or any remote MCP server; header auth (RemoteMcpConfig)
@@ -1018,8 +1020,16 @@ function pushJavaCoverageNotes(renderConfig: AgentRenderConfig, context: Resolve
   // Spring AI tool-loop introspection that is still a Phase B follow-up.
   if (renderConfig.maxTokens !== undefined || renderConfig.maxIterations !== undefined)
     gaps.push('execution-limit budgets maxTokens / maxIterations (timeout IS wired) — Phase B');
-  if (renderConfig.truncationStrategy && renderConfig.truncationStrategy !== 'none')
-    gaps.push(`truncation (${renderConfig.truncationStrategy}) — Phase B (AgentCore SDK 2.2 Session API)`);
+  if (renderConfig.hasSessionTruncation)
+    gaps.push(
+      `truncation (${renderConfig.truncationStrategy}) → wired via the AgentCore Session API, which ` +
+        `requires SDK 2.2.0 — bump spring-ai-agentcore-bom to 2.2.0 in pom.xml before building/deploying`
+    );
+  else if (renderConfig.truncationStrategy && renderConfig.truncationStrategy !== 'none')
+    gaps.push(
+      `truncation (${renderConfig.truncationStrategy}) — ignored: the Java Session API window is ` +
+        `memory-backed, but this agent has no memory (add memory, or truncation has no effect)`
+    );
   if (renderConfig.hasShell || renderConfig.hasFileOperations)
     gaps.push('builtin shell / file_operations tools — Phase B (B6)');
   if (renderConfig.gatewayProviders.some(g => g.authType !== 'AWS_IAM'))
@@ -1171,6 +1181,39 @@ function resolveTruncationConfig(truncation: HarnessTruncationConfig | undefined
         .map(([k, v]) => [v, s[k]])
     );
     return Object.keys(out).length > 0 ? out : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * (Java, SDK 2.2 Session API) Map harness truncation onto the AgentCore Session API read-window. Both
+ * strategies bound the recent-events window (`agentcore.memory.session.total-events-limit`);
+ * summarization additionally relies on the memory's SUMMARIZATION long-term strategy (auto-discovered
+ * by the memory capability), so no in-window summarizer is generated. The Session API is memory-backed
+ * — it windows AgentCore Memory events — so this only wires when the agent has memory; a truncation-
+ * but-no-memory harness is a no-op (flagged in the coverage note). Returns {} for non-Java, no
+ * truncation, or `none`.
+ */
+function buildSessionTruncationRenderConfig(
+  spec: HarnessSpec,
+  isJava: boolean,
+  hasMemory: boolean
+): Pick<AgentRenderConfig, 'hasSessionTruncation' | 'sessionTotalEventsLimit'> {
+  const strategy = spec.truncation?.strategy;
+  if (!isJava || !hasMemory || (strategy !== 'sliding_window' && strategy !== 'summarization')) return {};
+  const limit = resolveSessionEventsLimit(spec.truncation);
+  return { hasSessionTruncation: true, ...(limit !== undefined ? { sessionTotalEventsLimit: limit } : {}) };
+}
+
+/** The Session API read-window size: sliding_window.messagesCount or summarization.preserveRecentMessages. */
+function resolveSessionEventsLimit(truncation: HarnessTruncationConfig | undefined): number | undefined {
+  const config = truncation?.config;
+  if (!config) return undefined;
+  if (truncation.strategy === 'sliding_window' && 'slidingWindow' in config) {
+    return config.slidingWindow?.messagesCount;
+  }
+  if (truncation.strategy === 'summarization' && 'summarization' in config) {
+    return (config.summarization as { preserveRecentMessages?: number })?.preserveRecentMessages;
   }
   return undefined;
 }

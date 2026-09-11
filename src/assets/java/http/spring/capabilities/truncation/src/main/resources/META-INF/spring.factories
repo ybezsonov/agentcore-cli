@@ -1,0 +1,4 @@
+# Registers the truncation bridge so it enables the AgentCore Session API read-window (from the
+# harness's truncation limit) before the session auto-configuration evaluates its enabled gate — and
+# only when a memory id env var is present, so the app boots inert without memory.
+org.springframework.boot.EnvironmentPostProcessor=com.example.agent.truncation.TruncationEnvironmentPostProcessor

@@ -130,6 +130,13 @@ export interface AgentRenderConfig {
   /** (Java) True when at least one remote MCP server declares header credentials — renders the
    *  RemoteMcpConfig header customizer. URL-only remote servers need no capability code. */
   hasRemoteMcpHeaderAuth?: boolean;
+  /** (Java, SDK 2.2+) True when harness truncation maps onto the AgentCore Session API read-window
+   *  (sliding_window OR summarization) AND the agent has memory (the Session API is memory-backed).
+   *  Renders the truncation capability (enables the session + bounds events when memory is present). */
+  hasSessionTruncation?: boolean;
+  /** (Java) The Session API read-window size — `agentcore.memory.session.total-events-limit`. From
+   *  sliding_window.messagesCount or summarization.preserveRecentMessages; undefined = SDK default. */
+  sessionTotalEventsLimit?: number;
 
   /** Skill paths for AgentSkills plugin */
   pathSkills?: string[];
