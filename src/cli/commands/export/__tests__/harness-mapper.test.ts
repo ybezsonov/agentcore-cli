@@ -1405,7 +1405,7 @@ describe('Java / SpringAI export', () => {
     const { renderConfig } = mapHarnessToExportConfig(ctx, undefined, JAVA);
     const note = ctx.exportNotes.find(n => n.category === JAVA_UNSUPPORTED_FEATURES_NOTE_CATEGORY);
     expect(note).toBeDefined();
-    expect(note!.message).toMatch(/skills — s3\/git fetching/);
+    expect(note!.message).toMatch(/skills — s3 \(1\) fetching/);
     expect(note!.message).toMatch(/inline function tools/);
     expect(note!.message).toMatch(/maxTokens \/ maxIterations/);
     expect(note!.message).toMatch(/truncation/);
@@ -1441,15 +1441,30 @@ describe('Java / SpringAI export', () => {
     expect(note?.message ?? '').not.toMatch(/s3\/git fetching/);
   });
 
-  it('still flags s3/git skills as needing runtime fetching in Java (B3b/B3c)', () => {
+  it('flags s3 skills as unwired but treats PUBLIC git as wired in Java (B3b / B3c-public)', () => {
     const ctx = baseContext({
       skills: [{ path: 'skills/local' }, { s3Uri: 's3://bucket/skill' }, { gitUrl: 'https://github.com/org/repo' }],
     });
     mapHarnessToExportConfig(ctx, undefined, JAVA);
     const note = ctx.exportNotes.find(n => n.category === JAVA_UNSUPPORTED_FEATURES_NOTE_CATEGORY);
     expect(note).toBeDefined();
-    expect(note!.message).toMatch(/skills — s3\/git fetching \(2\)/);
-    expect(note!.message).toMatch(/path skills ARE wired/);
+    expect(note!.message).toMatch(/skills — s3 \(1\) fetching/);
+    expect(note!.message).not.toMatch(/private git/);
+    expect(note!.message).toMatch(/path \+ public git skills ARE wired/);
+  });
+
+  it('flags PRIVATE git skills (auth) as unwired in Java (B3c-private)', () => {
+    const ctx = baseContext({
+      skills: [
+        { gitUrl: 'https://github.com/org/pub' },
+        { gitUrl: 'https://github.com/org/priv', auth: { credentialName: 'MyGitCred' } },
+      ],
+    });
+    mapHarnessToExportConfig(ctx, undefined, JAVA);
+    const note = ctx.exportNotes.find(n => n.category === JAVA_UNSUPPORTED_FEATURES_NOTE_CATEGORY);
+    expect(note).toBeDefined();
+    expect(note!.message).toMatch(/private git \(1\)/);
+    expect(note!.message).not.toMatch(/s3 \(/);
   });
 
   // H2 — browser / code-interpreter custom-ARN identifier

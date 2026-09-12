@@ -16,15 +16,18 @@ import { createRenderer } from '../../templates';
 import {
   CUSTOM_DOCKERFILE_NOTE_CATEGORY,
   EXPORT_NOTES_FILENAME,
+  GIT_SKILLS_CLONED_NOTE_CATEGORY,
+  GIT_SKILLS_CLONE_FAILED_NOTE_CATEGORY,
   PATH_SKILLS_COPIED_NOTE_CATEGORY,
   PATH_SKILLS_VERIFY_BASE_IMAGE_NOTE_CATEGORY,
 } from './constants';
 import { fetchHarnessSpecByArn } from './fetch-harness-spec';
-import { isPathSkill, mapHarnessToExportConfig } from './harness-mapper';
+import { isGitSkill, isPathSkill, mapHarnessToExportConfig } from './harness-mapper';
 import { resolveHarnessContext } from './harness-resolver';
 import type { ExportHarnessOptions, ExportLanguageConfig, ExportNote, ResolvedHarnessContext } from './types';
-import { execSync } from 'node:child_process';
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, execSync } from 'node:child_process';
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, isAbsolute, join, resolve, sep } from 'node:path';
 
 export interface ExportHarnessProgress {
@@ -224,6 +227,61 @@ export async function handleExportHarness(
         }
         if (unresolved.length > 0) {
           context.exportNotes.push(buildPathSkillsVerifyNote(unresolved, targetAgentName));
+        }
+
+        // Java: PUBLIC git skills are shallow-cloned here at export and staged into the classpath
+        // skills dir (exactly like path skills), so the runtime loads them inert from the jar — no
+        // git in the image, no runtime fetch, catalog baked at build. PRIVATE git skills (auth) need a
+        // runtime AgentCore workload-identity token to resolve the credential and are deferred
+        // (B3c-private) — they stay flagged in the Java coverage note. Python/TS clone at runtime.
+        if (isJava) {
+          const gitStaged: string[] = [];
+          const gitFailed: string[] = [];
+          for (const skill of context.spec.skills) {
+            if (!isGitSkill(skill) || skill.auth?.credentialName) continue; // public git only
+            const url = skill.gitUrl;
+            const subPath = skill.path;
+            // Defensive: the schema enforces https; reject an absolute/traversing repo subdir.
+            if (
+              !url.startsWith('https://') ||
+              (subPath && (isAbsolute(subPath) || subPath.split(/[\\/]/).includes('..')))
+            ) {
+              gitFailed.push(url);
+              continue;
+            }
+            let tmp: string | undefined;
+            try {
+              tmp = mkdtempSync(join(tmpdir(), 'agentcore-gitskill-'));
+              // execFileSync (no shell) avoids command injection from the URL.
+              execFileSync('git', ['clone', '--depth', '1', '--quiet', url, tmp], {
+                stdio: 'ignore',
+                timeout: 120_000,
+              });
+              rmSync(join(tmp, '.git'), { recursive: true, force: true });
+              const srcDir = subPath ? join(tmp, subPath) : tmp;
+              if (!existsSync(srcDir)) {
+                gitFailed.push(url);
+                continue;
+              }
+              const destName = uniqueSkillDirName(basename(subPath ?? repoDirName(url)) || 'skill', usedJavaDestNames);
+              const dest = join(javaSkillsRoot, destName);
+              mkdirSync(dest, { recursive: true });
+              cpSync(srcDir, dest, { recursive: true });
+              gitStaged.push(url);
+            } catch {
+              // git missing, no network, private repo, or a bad URL/subdir — fall back to a note so the
+              // export still succeeds; the user provides the skill in the image or fixes the URL.
+              gitFailed.push(url);
+            } finally {
+              if (tmp) rmSync(tmp, { recursive: true, force: true });
+            }
+          }
+          if (gitStaged.length > 0) {
+            context.exportNotes.push(buildGitSkillsClonedNote(gitStaged, targetAgentName));
+          }
+          if (gitFailed.length > 0) {
+            context.exportNotes.push(buildGitSkillsClonedFailedNote(gitFailed, targetAgentName));
+          }
         }
       }
 
@@ -458,6 +516,13 @@ function uniqueSkillDirName(base: string, used: Set<string>): string {
   return name;
 }
 
+/** Last path segment of a git URL, minus any `.git` suffix (fallback skill dir name). */
+function repoDirName(url: string): string {
+  const noQuery = url.split(/[#?]/)[0].replace(/\/+$/, '');
+  const last = noQuery.split('/').filter(Boolean).pop() ?? 'skill';
+  return last.replace(/\.git$/, '') || 'skill';
+}
+
 /** Note emitted when local path-skill directories were copied into the generated agent dir. */
 export function buildPathSkillsCopiedNote(paths: string[], targetAgentName: string, isJava = false): ExportNote {
   const isAre = paths.length === 1 ? 'directory was' : 'directories were';
@@ -487,6 +552,33 @@ export function buildPathSkillsVerifyNote(paths: string[], targetAgentName: stri
       `${paths.map(p => `"${p}"`).join(', ')}. The exported agent loads ${paths.length === 1 ? 'this path' : 'these paths'} ` +
       `at runtime — ensure ${paths.length === 1 ? 'it exists' : 'they exist'} on the container filesystem (e.g. installed ` +
       `in your base image or added via a Dockerfile COPY) before \`agentcore deploy\`.`,
+  };
+}
+
+/** Note emitted when public git skill repos were shallow-cloned at export and staged into the jar. */
+export function buildGitSkillsClonedNote(urls: string[], targetAgentName: string): ExportNote {
+  return {
+    category: GIT_SKILLS_CLONED_NOTE_CATEGORY,
+    message:
+      `The following public git skill ${urls.length === 1 ? 'repository was' : 'repositories were'} shallow-cloned at ` +
+      `export and staged into app/${targetAgentName}/src/main/resources/skills/, so ${urls.length === 1 ? 'it is' : 'they are'} ` +
+      `packaged into the Spring Boot jar and loaded by the SkillsTool — no git in the image, no runtime fetch: ` +
+      `${urls.map(u => `"${u}"`).join(', ')}. Re-export to refresh the snapshot.`,
+  };
+}
+
+/**
+ * Note emitted when a public git skill repo could not be cloned at export (git missing, no network,
+ * a private repo, or a bad URL/subdir). The export still succeeds; the skill is simply not staged.
+ */
+export function buildGitSkillsClonedFailedNote(urls: string[], targetAgentName: string): ExportNote {
+  return {
+    category: GIT_SKILLS_CLONE_FAILED_NOTE_CATEGORY,
+    message:
+      `The following git skill ${urls.length === 1 ? 'repository could' : 'repositories could'} not be cloned at export, ` +
+      `so ${urls.length === 1 ? 'it was' : 'they were'} NOT staged into app/${targetAgentName}/: ` +
+      `${urls.map(u => `"${u}"`).join(', ')}. Ensure \`git\` and network access are available and the URL is a public ` +
+      `HTTPS repo, then re-export. (Private repos are not yet supported for Java export.)`,
   };
 }
 

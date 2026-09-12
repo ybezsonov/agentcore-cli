@@ -12,6 +12,8 @@ export const PATH_SKILLS_VERIFY_BASE_IMAGE_NOTE_CATEGORY =
   'path skill not found locally — verify it exists in the base image';
 export const MCP_HEADER_CREDS_NOTE_CATEGORY = 'MCP tool header credentials';
 export const GIT_SKILLS_CONTAINER_NOTE_CATEGORY = 'git skills require git in container image';
+export const GIT_SKILLS_CLONED_NOTE_CATEGORY = 'public git skills cloned into agent directory';
+export const GIT_SKILLS_CLONE_FAILED_NOTE_CATEGORY = 'public git skill could not be cloned at export';
 export const GATEWAY_GRANT_TYPE_NOTE_CATEGORY = 'Gateway OAuth grant type not supported by generated client (M2M only)';
 export const BROWSER_CODZIP_NOTE_CATEGORY = 'Browser tool requires Container build — excluded from CodeZip export';
 export const AWS_SKILLS_NOTE_CATEGORY = 'AWS skills omitted — not available outside managed harness';

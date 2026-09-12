@@ -145,9 +145,11 @@ export function mapHarnessToExportConfig(
     });
   }
 
-  // git skills + Container: warn that git must be in the image
+  // git skills + Container: warn that git must be in the image (Python/TS clone at runtime). Java does
+  // NOT need git in the image — the CLI shallow-clones PUBLIC git skills at export and stages them into
+  // the jar (see harness-action); private git skills are deferred and flagged by the Java coverage note.
   const gitSkills = spec.skills.filter(s => isGitSkill(s));
-  if (gitSkills.length > 0 && buildType === 'Container') {
+  if (gitSkills.length > 0 && buildType === 'Container' && !isJava) {
     context.exportNotes.push({
       category: GIT_SKILLS_CONTAINER_NOTE_CATEGORY,
       message:
@@ -1007,14 +1009,21 @@ function assertJavaExportSupported(spec: HarnessSpec, buildOverride?: BuildType)
  */
 function pushJavaCoverageNotes(renderConfig: AgentRenderConfig, context: ResolvedHarnessContext): void {
   const gaps: string[] = [];
-  // Path skills ARE wired (B3a): staged into src/main/resources/skills/ and surfaced to the model by
-  // the community SkillsTool (progressive disclosure). s3/git skills still need runtime fetching (B3b/B3c).
-  const unwiredFetchSkillCount = (renderConfig.s3Skills?.length ?? 0) + (renderConfig.gitSkills?.length ?? 0);
-  if (unwiredFetchSkillCount > 0)
+  // Path skills (B3a) and PUBLIC git skills (B3c-public) ARE wired: staged into
+  // src/main/resources/skills/ (git repos shallow-cloned at export) and surfaced to the model by the
+  // community SkillsTool (progressive disclosure). Still unwired: s3 skills (need runtime fetch, B3b)
+  // and PRIVATE git skills (need a runtime workload-identity token, B3c-private).
+  const s3SkillCount = renderConfig.s3Skills?.length ?? 0;
+  const privateGitSkillCount = renderConfig.gitSkills?.filter(g => g.credentialArn).length ?? 0;
+  if (s3SkillCount + privateGitSkillCount > 0) {
+    const parts: string[] = [];
+    if (s3SkillCount > 0) parts.push(`s3 (${s3SkillCount})`);
+    if (privateGitSkillCount > 0) parts.push(`private git (${privateGitSkillCount})`);
     gaps.push(
-      `skills — s3/git fetching (${unwiredFetchSkillCount}) — harness/export Phase B (B3b/B3c); ` +
-        `path skills ARE wired`
+      `skills — ${parts.join(' + ')} fetching — harness/export Phase B (B3b / B3c-private); ` +
+        `path + public git skills ARE wired`
     );
+  }
   if (renderConfig.inlineFunctionTools?.length)
     gaps.push(`inline function tools (${renderConfig.inlineFunctionTools.length}) — Phase B (B2)`);
   // Note: remote (non-gateway) MCP tools ARE wired (H3) — URLs in application.properties + a
@@ -1124,7 +1133,7 @@ function parseS3SkillArns(
   return { bucket, bucketArn, objectArn };
 }
 
-function isGitSkill(skill: HarnessSkill): skill is HarnessSkillGitSource {
+export function isGitSkill(skill: HarnessSkill): skill is HarnessSkillGitSource {
   return 'gitUrl' in skill;
 }
 
