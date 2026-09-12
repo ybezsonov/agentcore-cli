@@ -114,6 +114,19 @@ export abstract class BaseRenderer {
       }
     }
 
+    // Skills (Java export only). Path skills are staged into src/main/resources/skills/ by the export
+    // action and surfaced to the model by the community SkillsTool (spring-ai-agent-utils) via
+    // progressive disclosure — SkillsConfig wraps it as a ToolCallbackProvider the base ChatService
+    // composes automatically. Python/TS express skills inline in their base (skills/fetcher.py), so they
+    // ship no capabilities/skills dir and the existsSync guard skips them; the Java files live under
+    // src/main/java/<package>/ and merge into the project source, so they render into projectDir.
+    if (this.config.hasSkillsFetcher) {
+      const skillsCapabilityDir = path.join(templateDir, 'capabilities', 'skills');
+      if (existsSync(skillsCapabilityDir)) {
+        await copyAndRenderDir(skillsCapabilityDir, projectDir, templateData);
+      }
+    }
+
     if (this.shouldRenderPayment()) {
       const paymentCapabilityDir = path.join(templateDir, 'capabilities', 'payments');
       if (existsSync(paymentCapabilityDir)) {

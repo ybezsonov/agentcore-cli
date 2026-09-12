@@ -65,6 +65,13 @@ describe('buildPathSkillsCopiedNote', () => {
     expect(note.message).toContain('"skills/a"');
     expect(note.message).toContain('"skills/b"');
   });
+
+  it('describes the Java classpath-resource destination when isJava (B3a)', () => {
+    const note = buildPathSkillsCopiedNote(['skills/greeting'], 'MyAgent', true);
+    expect(note.message).toContain('app/MyAgent/src/main/resources/skills/');
+    expect(note.message).toContain('SkillsTool');
+    expect(note.message).toContain('"skills/greeting"');
+  });
 });
 
 describe('buildPathSkillsVerifyNote', () => {

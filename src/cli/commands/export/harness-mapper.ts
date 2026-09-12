@@ -1007,11 +1007,14 @@ function assertJavaExportSupported(spec: HarnessSpec, buildOverride?: BuildType)
  */
 function pushJavaCoverageNotes(renderConfig: AgentRenderConfig, context: ResolvedHarnessContext): void {
   const gaps: string[] = [];
-  const skillCount =
-    (renderConfig.pathSkills?.length ?? 0) +
-    (renderConfig.s3Skills?.length ?? 0) +
-    (renderConfig.gitSkills?.length ?? 0);
-  if (skillCount > 0) gaps.push(`skills (${skillCount}): path/s3/git skill loading — harness/export Phase B (B3)`);
+  // Path skills ARE wired (B3a): staged into src/main/resources/skills/ and surfaced to the model by
+  // the community SkillsTool (progressive disclosure). s3/git skills still need runtime fetching (B3b/B3c).
+  const unwiredFetchSkillCount = (renderConfig.s3Skills?.length ?? 0) + (renderConfig.gitSkills?.length ?? 0);
+  if (unwiredFetchSkillCount > 0)
+    gaps.push(
+      `skills — s3/git fetching (${unwiredFetchSkillCount}) — harness/export Phase B (B3b/B3c); ` +
+        `path skills ARE wired`
+    );
   if (renderConfig.inlineFunctionTools?.length)
     gaps.push(`inline function tools (${renderConfig.inlineFunctionTools.length}) — Phase B (B2)`);
   // Note: remote (non-gateway) MCP tools ARE wired (H3) — URLs in application.properties + a

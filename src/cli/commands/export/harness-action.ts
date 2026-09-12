@@ -183,16 +183,20 @@ export async function handleExportHarness(
         }
       }
 
-      // 3b. Path skills + CLI-generated Dockerfile: the custom-dockerfile branch above already
-      //     copies the whole harness dir, but a plain `--build Container` / containerUri build uses
-      //     a generated Dockerfile (`COPY . .`) and the harness dir is NOT otherwise copied. Per the
-      //     documented contract, copy each path-skill directory that resolves locally under the
-      //     harness dir into the agent dir so the generated Dockerfile bundles it (no manual step);
-      //     unresolvable paths (absolute, traversal, or not found) are assumed to live in the base
-      //     image and get a verify-note instead. (Container only — CodeZip path skills are unsupported
-      //     and already noted by the mapper.)
-      if (!isJava && !context.spec.dockerfile && renderConfig.buildType === 'Container') {
+      // 3b. Path skills → bundle into the image. The custom-dockerfile branch above already copies
+      //     the whole harness dir, but a plain `--build Container` / containerUri build uses a
+      //     generated Dockerfile and the harness dir is NOT otherwise copied, so copy each locally
+      //     resolvable path-skill directory in. Java packages them as classpath resources under
+      //     src/main/resources/skills/<dir>/ (bundled into the Spring Boot jar, then discovered by the
+      //     community SkillsTool via classpath scanning); Python/TS keep the harness-relative path so
+      //     the generated Dockerfile's `COPY . .` bundles them. Unresolvable paths (absolute,
+      //     traversal, or not found locally) are assumed to live in the base image and get a
+      //     verify-note instead. (Container only — CodeZip path skills are unsupported and already
+      //     noted by the mapper.)
+      if (!context.spec.dockerfile && renderConfig.buildType === 'Container') {
         const harnessDir = join(context.projectRoot, 'app', harnessName);
+        const javaSkillsRoot = join(agentDir, 'src', 'main', 'resources', 'skills');
+        const usedJavaDestNames = new Set<string>();
         const copied: string[] = [];
         const unresolved: string[] = [];
         for (const skill of context.spec.skills) {
@@ -203,7 +207,11 @@ export async function handleExportHarness(
           // Reject absolute paths and traversal — must resolve to a dir inside the harness dir.
           const escapesHarness = isAbsolute(skillPath) || !resolve(skillSrc).startsWith(resolve(harnessDir) + sep);
           if (!escapesHarness && existsSync(skillSrc)) {
-            const skillDest = join(agentDir, skillPath);
+            // Java: SkillsTool keys skills by their SKILL.md `name`, so the on-disk subdir name is
+            // cosmetic — use the (collision-safe) source basename under src/main/resources/skills/.
+            const skillDest = isJava
+              ? join(javaSkillsRoot, uniqueSkillDirName(basename(skillPath) || 'skill', usedJavaDestNames))
+              : join(agentDir, skillPath);
             mkdirSync(skillDest, { recursive: true });
             cpSync(skillSrc, skillDest, { recursive: true });
             copied.push(skillPath);
@@ -212,7 +220,7 @@ export async function handleExportHarness(
           }
         }
         if (copied.length > 0) {
-          context.exportNotes.push(buildPathSkillsCopiedNote(copied, targetAgentName));
+          context.exportNotes.push(buildPathSkillsCopiedNote(copied, targetAgentName, isJava));
         }
         if (unresolved.length > 0) {
           context.exportNotes.push(buildPathSkillsVerifyNote(unresolved, targetAgentName));
@@ -442,14 +450,27 @@ export function buildMissingDockerfileNote(
   };
 }
 
+/** Collision-safe skill subdirectory name (SkillsTool keys skills by their SKILL.md `name`). */
+function uniqueSkillDirName(base: string, used: Set<string>): string {
+  let name = base;
+  for (let n = 2; used.has(name); n++) name = `${base}-${n}`;
+  used.add(name);
+  return name;
+}
+
 /** Note emitted when local path-skill directories were copied into the generated agent dir. */
-export function buildPathSkillsCopiedNote(paths: string[], targetAgentName: string): ExportNote {
+export function buildPathSkillsCopiedNote(paths: string[], targetAgentName: string, isJava = false): ExportNote {
+  const isAre = paths.length === 1 ? 'directory was' : 'directories were';
+  const dest = isJava
+    ? `app/${targetAgentName}/src/main/resources/skills/, so ${paths.length === 1 ? 'it is' : 'they are'} packaged ` +
+      `into the Spring Boot jar and loaded by the SkillsTool via classpath scanning`
+    : `app/${targetAgentName}/ so the generated Dockerfile's \`COPY . .\` step bundles ` +
+      `${paths.length === 1 ? 'it' : 'them'} into the image`;
   return {
     category: PATH_SKILLS_COPIED_NOTE_CATEGORY,
     message:
-      `The following path-skill ${paths.length === 1 ? 'directory was' : 'directories were'} copied into ` +
-      `app/${targetAgentName}/ so the generated Dockerfile's \`COPY . .\` step bundles ${paths.length === 1 ? 'it' : 'them'} ` +
-      `into the image — no manual step required: ${paths.map(p => `"${p}"`).join(', ')}.`,
+      `The following path-skill ${isAre} copied into ${dest} — no manual step required: ` +
+      `${paths.map(p => `"${p}"`).join(', ')}.`,
   };
 }
 

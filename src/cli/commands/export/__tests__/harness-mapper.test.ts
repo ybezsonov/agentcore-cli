@@ -1391,7 +1391,7 @@ describe('Java / SpringAI export', () => {
 
   it('emits one consolidated note for harness features not yet wired in Java', () => {
     const ctx = baseContext({
-      skills: [{ path: 'skills/local' }],
+      skills: [{ s3Uri: 's3://bucket/skill' }], // s3/git fetching is still a Phase-B gap (path skills ARE wired)
       tools: [
         {
           type: 'inline_function',
@@ -1405,7 +1405,7 @@ describe('Java / SpringAI export', () => {
     const { renderConfig } = mapHarnessToExportConfig(ctx, undefined, JAVA);
     const note = ctx.exportNotes.find(n => n.category === JAVA_UNSUPPORTED_FEATURES_NOTE_CATEGORY);
     expect(note).toBeDefined();
-    expect(note!.message).toMatch(/skills/);
+    expect(note!.message).toMatch(/skills — s3\/git fetching/);
     expect(note!.message).toMatch(/inline function tools/);
     expect(note!.message).toMatch(/maxTokens \/ maxIterations/);
     expect(note!.message).toMatch(/truncation/);
@@ -1428,6 +1428,28 @@ describe('Java / SpringAI export', () => {
     const note = ctx.exportNotes.find(n => n.category === JAVA_UNSUPPORTED_FEATURES_NOTE_CATEGORY);
     expect(note).toBeDefined();
     expect(note!.message).toMatch(/shell/);
+  });
+
+  // B3a — skills (path skills wired via SkillsTool; s3/git fetching deferred to B3b/B3c)
+  it('wires path skills for Java and does not flag them as unwired (B3a)', () => {
+    const ctx = baseContext({ skills: [{ path: 'skills/greeting' }] });
+    const { renderConfig } = mapHarnessToExportConfig(ctx, undefined, JAVA);
+    expect(renderConfig.hasSkillsFetcher).toBe(true);
+    expect(renderConfig.pathSkills).toEqual(['skills/greeting']);
+    const note = ctx.exportNotes.find(n => n.category === JAVA_UNSUPPORTED_FEATURES_NOTE_CATEGORY);
+    // A coverage note may exist for other default features, but it must not flag skills.
+    expect(note?.message ?? '').not.toMatch(/s3\/git fetching/);
+  });
+
+  it('still flags s3/git skills as needing runtime fetching in Java (B3b/B3c)', () => {
+    const ctx = baseContext({
+      skills: [{ path: 'skills/local' }, { s3Uri: 's3://bucket/skill' }, { gitUrl: 'https://github.com/org/repo' }],
+    });
+    mapHarnessToExportConfig(ctx, undefined, JAVA);
+    const note = ctx.exportNotes.find(n => n.category === JAVA_UNSUPPORTED_FEATURES_NOTE_CATEGORY);
+    expect(note).toBeDefined();
+    expect(note!.message).toMatch(/skills — s3\/git fetching \(2\)/);
+    expect(note!.message).toMatch(/path skills ARE wired/);
   });
 
   // H2 — browser / code-interpreter custom-ARN identifier
