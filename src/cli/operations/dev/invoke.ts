@@ -1,4 +1,5 @@
 import { DevServerConnectionError, DevServerError } from '../../../lib/errors/types';
+import { extractResult, isSSEResponse, parseSSE, parseSSELine } from '../../aws/sse';
 import { invokeA2AStreaming } from './invoke-a2a';
 import { invokeAguiStreaming } from './invoke-agui';
 import { type InvokeStreamingOptions, type SSELogger } from './invoke-types';
@@ -6,81 +7,9 @@ import { isConnectionError, sleep } from './utils';
 
 export { type InvokeStreamingOptions, type SSELogger } from './invoke-types';
 
-/**
- * Parse a single SSE data line and extract the content.
- */
-// TODO(java-rfc Q2): this duplicates parseSSELine in aws/agentcore.ts — dedupe into one shared
-// SSE util. See review/6-rfc-open-questions.md.
-export function parseSSELine(line: string): { content: string | null; error: string | null } {
-  if (!line.startsWith('data:')) {
-    return { content: null, error: null };
-  }
-  // Keep everything after "data:" WITHOUT stripping the SSE cosmetic leading space. Spring/Java
-  // agents stream raw text chunks whose leading space is a significant word separator (" will"); a
-  // spec-strict strip (slice(6)) both eats that space (rendering "Iwill") and — combined with the
-  // old `data: ` guard — drops chunks that have no leading space. JSON-framed producers (Python/TS
-  // ConverseStream, {"text":...}) are unaffected because JSON.parse ignores the leading whitespace.
-  // Mirrors the java-on-aws chat UI's substring(5) reconstruction.
-  const raw = line.slice(5);
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed === 'string') {
-      return { content: parsed, error: null };
-    } else if (parsed && typeof parsed === 'object') {
-      if ('error' in parsed) {
-        return { content: null, error: String((parsed as { error: unknown }).error) };
-      }
-      // Handle {"text": "..."} format from bedrock-agentcore runtime
-      if ('text' in parsed) {
-        return { content: String((parsed as { text: unknown }).text), error: null };
-      }
-    }
-    // ConverseStream-shaped event: extract text delta
-    const event = (parsed as { event?: { contentBlockDelta?: { delta?: { text?: string } } } })?.event;
-    const text = event?.contentBlockDelta?.delta?.text;
-    if (typeof text === 'string') {
-      return { content: text, error: null };
-    }
-  } catch {
-    return { content: raw, error: null };
-  }
-  return { content: null, error: null };
-}
-
-/**
- * Parses Server-Sent Events (SSE) formatted text into combined content.
- * SSE format: "data: content\n\ndata: more content\n\n"
- */
-function parseSSE(text: string): string {
-  const parts: string[] = [];
-  for (const line of text.split('\n')) {
-    const { content, error } = parseSSELine(line);
-    if (error) {
-      return `Error: ${error}`;
-    }
-    if (content) {
-      parts.push(content);
-    }
-  }
-  return parts.length > 0 ? parts.join('') : text;
-}
-
-/**
- * Extract result from a JSON response object.
- * Handles both {"result": "..."} and plain text responses.
- */
-function extractResult(text: string): string {
-  try {
-    const parsed: unknown = JSON.parse(text);
-    if (parsed && typeof parsed === 'object' && 'result' in parsed) {
-      const result = (parsed as { result: unknown }).result;
-      return typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-    }
-    return JSON.stringify(parsed, null, 2);
-  } catch {
-    return text;
-  }
-}
+// SSE consumer (parseSSELine / parseSSE / isSSEResponse / extractResult) is shared from aws/sse
+// (Q2 dedupe). parseSSELine is imported for use here and re-exported for operations/dev/sse-transform.
+export { parseSSELine };
 
 /**
  * Invokes an agent on the local dev server and streams the response.
@@ -290,10 +219,8 @@ export async function invokeAgent(portOrOptions: number | InvokeOptions, message
         return '(empty response)';
       }
 
-      // Check if it's SSE format (streaming response). Match `data:` without a trailing space —
-      // Spring/Java runtimes emit no cosmetic space (see parseSSELine); requiring `data: ` made
-      // space-less responses (e.g. a code block) fall through to extractResult and render raw.
-      if (text.includes('data:')) {
+      // SSE (streaming) vs a plain JSON envelope — see isSSEResponse for the `data:`-match rationale.
+      if (isSSEResponse(text)) {
         return parseSSE(text);
       }
 

@@ -2,6 +2,7 @@ import { parseJsonRpcResponse } from '../../lib/utils/json-rpc';
 import { getCredentialProvider } from './account';
 import { parseAguiSSEStream } from './agui-parser';
 import { serviceEndpoint } from './partition';
+import { extractResult, isSSEResponse, parseSSE, parseSSELine } from './sse';
 import { dataPlaneEndpoint } from './stage-endpoint';
 import {
   BedrockAgentCoreClient,
@@ -108,90 +109,11 @@ export interface StopRuntimeSessionResult {
   statusCode: number | undefined;
 }
 
-/**
- * Parse a single SSE data line and extract the content.
- * Returns null if the line is not a data line or contains an error.
- */
-// TODO(java-rfc Q2): this duplicates parseSSELine in operations/dev/invoke.ts — dedupe into one
-// shared SSE util. See review/6-rfc-open-questions.md.
-export function parseSSELine(line: string): { content: string | null; error: string | null } {
-  if (!line.startsWith('data:')) {
-    return { content: null, error: null };
-  }
-  // Keep everything after "data:" WITHOUT stripping the SSE cosmetic leading space. Spring/Java
-  // agents stream raw text chunks whose leading space is a significant word separator (" will"); a
-  // spec-strict strip (slice(6)) both eats that space (rendering "Iwill") and — combined with the
-  // old `data: ` guard — drops chunks that have no leading space. JSON-framed producers (Python/TS
-  // ConverseStream, {"text":...}) are unaffected because JSON.parse ignores the leading whitespace.
-  // Mirrors the java-on-aws chat UI's substring(5) reconstruction.
-  const raw = line.slice(5);
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed === 'string') {
-      return { content: parsed, error: null };
-    } else if (parsed && typeof parsed === 'object' && 'error' in parsed) {
-      return { content: null, error: String((parsed as { error: unknown }).error) };
-    }
-    // ConverseStream-shaped event: extract text delta
-    const event = (parsed as { event?: { contentBlockDelta?: { delta?: { text?: string } } } })?.event;
-    const text = event?.contentBlockDelta?.delta?.text;
-    if (typeof text === 'string') {
-      return { content: text, error: null };
-    }
-  } catch {
-    return { content: raw, error: null };
-  }
-  return { content: null, error: null };
-}
-
-/**
- * Parse SSE response into combined text.
- */
-export function parseSSE(text: string): string {
-  const parts: string[] = [];
-  for (const line of text.split('\n')) {
-    const { content, error } = parseSSELine(line);
-    if (error) {
-      return `Error: ${error}`;
-    }
-    if (content) {
-      parts.push(content);
-    }
-  }
-  return parts.join('');
-}
-
-/**
- * True when a runtime response is SSE (streaming) rather than a plain JSON envelope, so the caller
- * runs parseSSE instead of extractResult.
- *
- * Tests for `data:` WITHOUT a trailing space: Spring/Java runtimes emit spec-compliant SSE with no
- * cosmetic space (`data:<token>`), matching parseSSELine's slice(5) contract. Requiring `data: `
- * made responses whose tokens never start with a space (e.g. a fenced code block) skip parseSSE and
- * fall to extractResult, whose JSON.parse throws on SSE and returns the raw `data:`-prefixed frames.
- * TODO(java-rfc Q2): the SSE consumer (this + parseSSELine) is duplicated across the invoke paths;
- * dedupe into one shared util.
- */
-export function isSSEResponse(text: string): boolean {
-  return text.includes('data:');
-}
-
-/**
- * Extract result from a JSON response object.
- * Handles both {"result": "..."} and plain text responses.
- */
-export function extractResult(text: string): string {
-  try {
-    const parsed: unknown = JSON.parse(text);
-    if (parsed && typeof parsed === 'object' && 'result' in parsed) {
-      const result = (parsed as { result: unknown }).result;
-      return typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-    }
-    return typeof parsed === 'string' ? parsed : JSON.stringify(parsed, null, 2);
-  } catch {
-    return text;
-  }
-}
+// The SSE consumer (parseSSELine / parseSSE / isSSEResponse / extractResult) is the single source of
+// truth in ./sse (Q2 dedupe — previously duplicated here and in operations/dev/invoke.ts). Imported
+// above for internal use by the streaming/invoke helpers below and re-exported here so existing
+// consumers (aws/index.ts, the invoke command) keep importing them from this module.
+export { parseSSELine, parseSSE, isSSEResponse, extractResult };
 
 /**
  * Build the JSON payload body for an invoke request.
