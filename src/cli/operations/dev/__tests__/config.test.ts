@@ -175,6 +175,41 @@ describe('getDevConfig', () => {
     expect(config?.isPython).toBe(false);
   });
 
+  it('returns Java config with isJava true for a .java entrypoint (container-only)', () => {
+    const project: AgentCoreProjectSpec = {
+      name: 'TestProject',
+      version: 1,
+      managedBy: 'CDK' as const,
+      runtimes: [
+        {
+          name: 'JavaAgent',
+          build: 'Container',
+          // Java omits runtimeVersion (container-only, no managed Java runtime)
+          entrypoint: filePath('AgentApplication.java'),
+          codeLocation: dirPath('./app/JavaAgent'),
+          protocol: 'HTTP',
+        },
+      ],
+      memories: [],
+      knowledgeBases: [],
+      credentials: [],
+      evaluators: [],
+      onlineEvalConfigs: [],
+      agentCoreGateways: [],
+      policyEngines: [],
+      configBundles: [],
+      abTests: [],
+      harnesses: [],
+      datasets: [],
+      payments: [],
+    };
+
+    const config = getDevConfig(workingDir, project, undefined, 'JavaAgent');
+    expect(config).not.toBeNull();
+    expect(config?.isJava).toBe(true);
+    expect(config?.isPython).toBe(false);
+  });
+
   it('resolves directory from codeLocation relative to configRoot', () => {
     const project: AgentCoreProjectSpec = {
       name: 'TestProject',

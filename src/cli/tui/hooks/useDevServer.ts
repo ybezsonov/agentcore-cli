@@ -258,6 +258,7 @@ export function useDevServer(options: {
     config?.module,
     config?.directory,
     config?.isPython,
+    config?.isJava,
     project,
     options.workingDir,
     options.portExplicit,
@@ -560,7 +561,9 @@ export function useDevServer(options: {
     invoke,
     execCommand,
     execInContainer,
-    isContainer: config?.buildType === 'Container',
+    // Java agents are container-only for deploy but run natively (mvn spring-boot:run) in dev,
+    // so there is no local container to exec into.
+    isContainer: config?.buildType === 'Container' && !config?.isJava,
     clearLogs,
     clearConversation,
     restart,

@@ -9,6 +9,8 @@ export interface DevConfig {
   directory: string;
   hasConfig: boolean;
   isPython: boolean;
+  /** Java/Spring agents run natively via `mvn spring-boot:run` (fast local loop) instead of a container build. */
+  isJava: boolean;
   buildType: BuildType;
   protocol: ProtocolMode;
   dockerfile?: string;
@@ -28,6 +30,13 @@ interface DevSupportResult {
  */
 function isPythonAgent(agent: AgentEnvSpec): boolean {
   return agent.entrypoint?.endsWith('.py') || agent.entrypoint?.includes('.py:');
+}
+
+/**
+ * Checks if the agent is a Java agent by looking at the entrypoint (e.g. `AgentApplication.java`).
+ */
+function isJavaAgent(agent: AgentEnvSpec): boolean {
+  return agent.entrypoint?.endsWith('.java') || agent.entrypoint?.includes('.java:');
 }
 
 /**
@@ -170,6 +179,7 @@ export function getDevConfig(
     directory,
     hasConfig: true,
     isPython: isPythonAgent(targetAgent),
+    isJava: isJavaAgent(targetAgent),
     buildType: targetAgent.build,
     protocol: targetAgent.protocol ?? 'HTTP',
     dockerfile: targetAgent.dockerfile,
