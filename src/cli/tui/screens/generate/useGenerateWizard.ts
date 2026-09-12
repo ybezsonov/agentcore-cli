@@ -51,6 +51,10 @@ export function useGenerateWizard(options?: UseGenerateWizardOptions) {
     if (hasInitialName) {
       filtered = filtered.filter(s => s !== 'projectName');
     }
+    // Java is container-only — the build-type choice is skipped (forced to Container in setLanguage).
+    if (config.language === 'Java') {
+      filtered = filtered.filter(s => s !== 'buildType');
+    }
     if (config.protocol === 'MCP') {
       filtered = filtered.filter(s => s !== 'sdk' && s !== 'modelProvider' && s !== 'apiKey');
     } else {
@@ -158,6 +162,13 @@ export function useGenerateWizard(options?: UseGenerateWizardOptions) {
   }, []);
 
   const setLanguage = useCallback((language: GenerateConfig['language']) => {
+    // Java is container-only, so skip the build-type choice and force Container; the protocol
+    // step then offers only HTTP (Spring AI is HTTP-only) and the framework step only Spring AI.
+    if (language === 'Java') {
+      setConfig(c => ({ ...c, language, buildType: 'Container' }));
+      setStep('protocol');
+      return;
+    }
     setConfig(c => ({ ...c, language }));
     setStep('buildType');
   }, []);

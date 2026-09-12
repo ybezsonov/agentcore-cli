@@ -28,6 +28,11 @@ describe('getSDKOptionsForProtocol', () => {
     expect(ids).not.toContain('OpenAIAgents');
     expect(ids).not.toContain('VercelAI');
   });
+
+  it('offers only Spring AI for Java HTTP agents', () => {
+    const ids = getSDKOptionsForProtocol('HTTP', 'Java').map(o => o.id);
+    expect(ids).toEqual(['SpringAI']);
+  });
 });
 
 describe('getProtocolOptionsForLanguage', () => {
@@ -41,5 +46,10 @@ describe('getProtocolOptionsForLanguage', () => {
     expect(ids).toContain('HTTP');
     expect(ids).toContain('MCP');
     expect(ids).toContain('A2A');
+  });
+
+  it('restricts Java to HTTP only (Spring AI is HTTP-only)', () => {
+    const ids = getProtocolOptionsForLanguage('Java').map(o => o.id);
+    expect(ids).toEqual(['HTTP']);
   });
 });

@@ -282,7 +282,10 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
       )
       .option('--type <type>', 'Agent type: create, byo, or import [non-interactive]', 'create')
       .option('--build <type>', 'Build type: CodeZip or Container (default: CodeZip) [non-interactive]')
-      .option('--language <lang>', 'Language: Python (create), or Python/TypeScript/Other (BYO) [non-interactive]')
+      .option(
+        '--language <lang>',
+        'Language: Python/TypeScript/Java (create), or Python/TypeScript/Other (BYO) [non-interactive]'
+      )
       .option(
         '--framework <fw>',
         'Framework: Strands, LangChain_LangGraph, GoogleADK, OpenAIAgents, VercelAI [non-interactive]'

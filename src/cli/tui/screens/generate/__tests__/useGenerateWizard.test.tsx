@@ -37,6 +37,21 @@ function setup(initialName?: string) {
 // Tests
 // ---------------------------------------------------------------------------
 
+describe('useGenerateWizard — Java (container-only)', () => {
+  it('forces Container and skips the buildType step for Java', () => {
+    const { ref, lastFrame } = setup();
+    act(() => {
+      ref.current!.wizard.setProjectName('JavaAgent');
+      ref.current!.wizard.setLanguage('Java');
+    });
+    expect(ref.current!.wizard.config.language).toBe('Java');
+    expect(ref.current!.wizard.config.buildType).toBe('Container');
+    expect(ref.current!.wizard.step).toBe('protocol');
+    // buildType is not offered as a step for Java
+    expect(lastFrame()!).not.toMatch(/steps:[^]*buildType/);
+  });
+});
+
 describe('useGenerateWizard — advanced config gate', () => {
   describe('step list includes advanced', () => {
     it('BASE steps include advanced before confirm', () => {

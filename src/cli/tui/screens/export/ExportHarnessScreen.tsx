@@ -1,4 +1,5 @@
 import { AgentNameSchema } from '../../../../schema';
+import type { TargetLanguage } from '../../../../schema';
 import { ConfirmReview, Screen, StepIndicator, TextInput, WizardSelect } from '../../components';
 import type { SelectableItem } from '../../components';
 import { useListNavigation } from '../../hooks';
@@ -15,8 +16,15 @@ interface ExportHarnessScreenProps {
   onExit: () => void;
 }
 
+const SCREEN_TITLE = 'Export Harness to Runtime Agent';
+
+const LANGUAGE_ITEMS: SelectableItem[] = [
+  { id: 'Python', title: 'Python', description: 'Strands agent (default)' },
+  { id: 'Java', title: 'Java', description: 'Spring AI agent (container-only)' },
+];
+
 const BUILD_ITEMS: SelectableItem[] = [
-  { id: 'CodeZip', title: 'CodeZip', description: 'Package Python source as a zip artifact (default)' },
+  { id: 'CodeZip', title: 'CodeZip', description: 'Package source as a zip artifact (default)' },
   { id: 'Container', title: 'Container', description: 'Build a Docker container image via ECR and CodeBuild' },
 ];
 
@@ -30,7 +38,7 @@ export function ExportHarnessScreen({
   onExit,
 }: ExportHarnessScreenProps) {
   const wizard = useExportHarnessWizard(harnessNames, onExit);
-  const { config, step, steps, goBack, setHarness, setTargetAgentName, setBuild } = wizard;
+  const { config, step, steps, goBack, setHarness, setTargetAgentName, setLanguage, setBuild } = wizard;
 
   const availableBuildItems = containerOnlyHarnesses.has(config.harness)
     ? BUILD_ITEMS.filter(b => b.id === 'Container')
@@ -43,6 +51,13 @@ export function ExportHarnessScreen({
     onSelect: item => setHarness(item.id),
     onExit: onExit,
     isActive: step === 'select-harness',
+  });
+
+  const languageNav = useListNavigation({
+    items: LANGUAGE_ITEMS,
+    onSelect: item => setLanguage(item.id as TargetLanguage),
+    onExit: goBack,
+    isActive: step === 'language',
   });
 
   const buildNav = useListNavigation({
@@ -61,7 +76,7 @@ export function ExportHarnessScreen({
 
   if (step === 'select-harness') {
     return (
-      <Screen title="Export Harness to Python Strands Agent" onExit={onExit}>
+      <Screen title={SCREEN_TITLE} onExit={onExit}>
         <StepIndicator steps={steps} currentStep={step} labels={EXPORT_HARNESS_STEP_LABELS} />
         <WizardSelect
           title="Select harness to export"
@@ -75,11 +90,11 @@ export function ExportHarnessScreen({
 
   if (step === 'target-name') {
     return (
-      <Screen title="Export Harness to Python Strands Agent" onExit={goBack}>
+      <Screen title={SCREEN_TITLE} onExit={goBack}>
         <StepIndicator steps={steps} currentStep={step} labels={EXPORT_HARNESS_STEP_LABELS} />
         <TextInput
           prompt="Runtime agent name"
-          description="Name for the generated Strands runtime agent"
+          description="Name for the generated runtime agent"
           initialValue={config.targetAgentName}
           onSubmit={value => {
             setTargetAgentName(value.trim());
@@ -98,9 +113,23 @@ export function ExportHarnessScreen({
     );
   }
 
+  if (step === 'language') {
+    return (
+      <Screen title={SCREEN_TITLE} onExit={goBack}>
+        <StepIndicator steps={steps} currentStep={step} labels={EXPORT_HARNESS_STEP_LABELS} />
+        <WizardSelect
+          title="Target language"
+          description="Generate a Python (Strands) or Java (Spring AI) runtime agent"
+          items={LANGUAGE_ITEMS}
+          selectedIndex={languageNav.selectedIndex}
+        />
+      </Screen>
+    );
+  }
+
   if (step === 'build-type') {
     return (
-      <Screen title="Export Harness to Python Strands Agent" onExit={goBack}>
+      <Screen title={SCREEN_TITLE} onExit={goBack}>
         <StepIndicator steps={steps} currentStep={step} labels={EXPORT_HARNESS_STEP_LABELS} />
         <WizardSelect
           title="Build type"
@@ -118,13 +147,14 @@ export function ExportHarnessScreen({
 
   if (step === 'confirm') {
     return (
-      <Screen title="Export Harness to Python Strands Agent" onExit={goBack}>
+      <Screen title={SCREEN_TITLE} onExit={goBack}>
         <StepIndicator steps={steps} currentStep={step} labels={EXPORT_HARNESS_STEP_LABELS} />
         <ConfirmReview
           title="Export configuration"
           fields={[
             { label: 'Harness', value: config.harness },
             { label: 'Runtime agent', value: config.targetAgentName },
+            { label: 'Language', value: `${config.language} (${config.framework})` },
             { label: 'Build type', value: config.build },
           ]}
           helpText="Enter to export · Esc back"

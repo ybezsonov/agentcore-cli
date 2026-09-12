@@ -151,6 +151,7 @@ export const STEP_LABELS: Record<GenerateStep, string> = {
 export const LANGUAGE_OPTIONS = [
   { id: 'Python', title: 'Python' },
   { id: 'TypeScript', title: 'TypeScript' },
+  { id: 'Java', title: 'Java' },
 ] as const;
 
 export const BUILD_TYPE_OPTIONS = [
@@ -167,10 +168,10 @@ export const PROTOCOL_OPTIONS = [
 
 /**
  * Get protocol options filtered by target language.
- * TypeScript only supports HTTP.
+ * TypeScript and Java only support HTTP (Java's only framework, Spring AI, is HTTP-only).
  */
 export function getProtocolOptionsForLanguage(language?: TargetLanguage) {
-  if (language === 'TypeScript') {
+  if (language === 'TypeScript' || language === 'Java') {
     return PROTOCOL_OPTIONS.filter(option => option.id === 'HTTP');
   }
   return [...PROTOCOL_OPTIONS];
@@ -182,6 +183,7 @@ export const SDK_OPTIONS = [
   { id: 'GoogleADK', title: 'Google ADK', description: 'Google Agent Development Kit' },
   { id: 'OpenAIAgents', title: 'OpenAI Agents', description: 'OpenAI native agent SDK' },
   { id: 'VercelAI', title: 'Vercel AI SDK', description: 'Vercel AI SDK for TypeScript agents' },
+  { id: 'SpringAI', title: 'Spring AI', description: 'Spring AI framework for Java agents' },
 ] as const;
 
 /**
@@ -192,7 +194,8 @@ export const SDK_OPTIONS = [
 export function getSDKOptionsForProtocol(protocol: ProtocolMode, language?: TargetLanguage) {
   const supportedFrameworks = PROTOCOL_FRAMEWORK_MATRIX[protocol];
   const byProtocol = SDK_OPTIONS.filter(option => supportedFrameworks.includes(option.id));
-  if (language === 'Python' || language === 'TypeScript') {
+  if (language) {
+    // Every language maps to its framework set (e.g. Java → Spring AI only); intersect with protocol.
     const byLanguage = getFrameworksForLanguage(language);
     return byProtocol.filter(option => byLanguage.includes(option.id));
   }

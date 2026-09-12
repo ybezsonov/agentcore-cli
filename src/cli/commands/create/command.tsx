@@ -495,7 +495,7 @@ export const registerCreate = (program: Command) => {
     .option('--no-agent', 'Skip agent creation [non-interactive]')
     .option('--defaults', 'Create a harness project with default settings (this is the default) [non-interactive]')
     .option('--build <type>', 'Build type: CodeZip or Container (default: CodeZip) [non-interactive]')
-    .option('--language <language>', 'Target language: Python or TypeScript (default: Python) [non-interactive]')
+    .option('--language <language>', 'Target language: Python, TypeScript, or Java (default: Python) [non-interactive]')
     .option(
       '--framework <framework>',
       'Agent framework (Strands, LangChain_LangGraph, GoogleADK, OpenAIAgents, VercelAI) [non-interactive]'
