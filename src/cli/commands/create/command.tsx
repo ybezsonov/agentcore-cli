@@ -6,7 +6,7 @@ import type {
   NetworkMode,
   ProtocolMode,
   SDKFramework,
-  TargetLanguage,
+  TemplateLanguage,
 } from '../../../schema';
 import { LIFECYCLE_TIMEOUT_MAX, LIFECYCLE_TIMEOUT_MIN } from '../../../schema';
 import { isCapacityProviderArn } from '../../../schema';
@@ -110,6 +110,7 @@ const AGENT_PATH_FLAGS = [
   'agentAliasId',
   'memory',
   'capacityProvider',
+  'withConfigBundle',
 ] as const;
 
 /** Flags that are harness-only */
@@ -431,7 +432,7 @@ async function handleCreateCLI(options: CreateOptions): Promise<void> {
             cwd,
             type: options.type as 'create' | 'import' | undefined,
             buildType: (options.build as BuildType) ?? 'CodeZip',
-            language: (options.language as TargetLanguage) ?? (options.type === 'import' ? 'Python' : undefined),
+            language: (options.language as TemplateLanguage) ?? (options.type === 'import' ? 'Python' : undefined),
             framework: options.framework as SDKFramework | undefined,
             modelProvider: options.modelProvider as ModelProvider | undefined,
             apiKey: options.apiKey,
@@ -467,8 +468,14 @@ async function handleCreateCLI(options: CreateOptions): Promise<void> {
       } else {
         printCreateSummary(projectName!, result.agentName, options.language, options.framework);
         if (options.skipInstall) {
+          const agentSetup =
+            options.language === 'Java'
+              ? "run 'mvn package' in your agent directory"
+              : options.language === 'TypeScript'
+                ? "run 'npm install' in your agent directory"
+                : "run 'uv sync' in your agent directory";
           console.log(
-            "\nDependency installation was skipped. Run 'npm install' in agentcore/cdk/ and 'uv sync' in your agent directory manually."
+            `\nDependency installation was skipped. Run 'npm install' in agentcore/cdk/ and ${agentSetup} manually.`
           );
         }
       }
@@ -491,10 +498,10 @@ export const registerCreate = (program: Command) => {
     .option('--no-agent', 'Skip agent creation [non-interactive]')
     .option('--defaults', 'Create a harness project with default settings (this is the default) [non-interactive]')
     .option('--build <type>', 'Build type: CodeZip or Container (default: CodeZip) [non-interactive]')
-    .option('--language <language>', 'Target language: Python or TypeScript (default: Python) [non-interactive]')
+    .option('--language <language>', 'Target language: Python, TypeScript, or Java (default: Python) [non-interactive]')
     .option(
       '--framework <framework>',
-      'Agent framework (Strands, LangChain_LangGraph, GoogleADK, OpenAIAgents, VercelAI) [non-interactive]'
+      'Agent framework (Strands, LangChain_LangGraph, GoogleADK, OpenAIAgents, VercelAI, SpringAI) [non-interactive]'
     )
     .option('--model-provider <provider>', 'Model provider (Bedrock, Anthropic, OpenAI, Gemini) [non-interactive]')
     .option('--api-key <key>', 'API key for non-Bedrock providers [non-interactive]')
@@ -656,6 +663,7 @@ export const registerCreate = (program: Command) => {
         options.capacityProvider ??
         (options.cpVolumeName?.length ? true : null) ??
         (options.cpVolumeMountPath?.length ? true : null) ??
+        options.withConfigBundle ??
         options.outputDir ??
         options.skipGit ??
         options.skipPythonSetup ??

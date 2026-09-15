@@ -28,6 +28,7 @@ import { ARN_VALIDATION_MESSAGE, isValidArn } from '../shared/arn-utils';
 import { validateHeaderAllowlist } from '../shared/header-utils';
 import { MAX_INDEXED_KEYS, parseIndexedKeyArg } from '../shared/indexed-key-parser';
 import { parseAndValidateLifecycleOptions } from '../shared/lifecycle-utils';
+import { validateLanguageMatrix } from '../shared/validate-language-matrix';
 import { validateVpcOptions } from '../shared/vpc-utils';
 import { validateJwtAuthorizerOptions } from './auth-options';
 import type {
@@ -135,6 +136,15 @@ export function validateAddAgentOptions(options: AddAgentOptions): ValidationRes
       (matchEnumValue(TargetLanguageSchema, options.language) as typeof options.language) ?? options.language;
   if (options.build) options.build = matchEnumValue(BuildTypeSchema, options.build) ?? options.build;
 
+  // Command normalization owns Java defaults; validateLanguageMatrix remains side-effect free.
+  if (options.language === 'Java') {
+    options.protocol ??= 'HTTP';
+    options.framework ??= 'SpringAI';
+    options.modelProvider ??= 'Bedrock';
+    options.memory ??= 'none';
+    options.build ??= 'Container';
+  }
+
   // Session storage is not supported for TypeScript agents — reject early before any path-specific returns
   if (options.sessionStorageMountPath && options.language === 'TypeScript') {
     return { valid: false, error: '--session-storage-mount-path is not supported for TypeScript agents' };
@@ -154,6 +164,18 @@ export function validateAddAgentOptions(options: AddAgentOptions): ValidationRes
     const buildResult = BuildTypeSchema.safeParse(options.build);
     if (!buildResult.success) {
       return { valid: false, error: `Invalid build type: ${options.build}. Use CodeZip or Container` };
+    }
+  }
+
+  const languageMatrixResult = validateLanguageMatrix(options);
+  if (!languageMatrixResult.valid) return languageMatrixResult;
+
+  if (options.systemPrompt !== undefined) {
+    if ((options.type ?? 'create') !== 'create' || options.language !== 'Java') {
+      return { valid: false, error: '--system-prompt is supported only when creating a Java agent' };
+    }
+    if (!options.systemPrompt.trim()) {
+      return { valid: false, error: '--system-prompt must not be empty' };
     }
   }
 
@@ -294,12 +316,12 @@ export function validateAddAgentOptions(options: AddAgentOptions): ValidationRes
     }
   } else {
     if (options.language === 'Other') {
-      return { valid: false, error: 'Create path only supports Python or TypeScript' };
+      return { valid: false, error: 'Create path does not support language Other' };
     }
     // Framework must ship a template for the chosen language (e.g. Vercel AI is
     // TypeScript-only, the other open-source frameworks are Python-only).
     if (
-      (langResult.data === 'Python' || langResult.data === 'TypeScript') &&
+      (langResult.data === 'Python' || langResult.data === 'TypeScript' || langResult.data === 'Java') &&
       !isFrameworkSupportedForLanguage(langResult.data, fwResult.data)
     ) {
       const supported = getFrameworksForLanguage(langResult.data).join(', ');

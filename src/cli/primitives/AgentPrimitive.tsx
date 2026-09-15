@@ -24,6 +24,7 @@ import type {
   RuntimeAuthorizerType,
   SDKFramework,
   TargetLanguage,
+  TemplateLanguage,
 } from '../../schema';
 import {
   AgentEnvSpecSchema,
@@ -47,6 +48,7 @@ import {
   zipCapacityProviderVolumePairs,
 } from '../commands/shared/filesystem-utils';
 import { parseAndNormalizeHeaders } from '../commands/shared/header-utils';
+import { validateLanguageMatrix } from '../commands/shared/validate-language-matrix';
 import type { VpcOptions } from '../commands/shared/vpc-utils';
 import { VPC_ENDPOINT_WARNING, parseCommaSeparatedList } from '../commands/shared/vpc-utils';
 import { getErrorMessage } from '../errors';
@@ -128,6 +130,8 @@ export interface AddAgentOptions extends VpcOptions {
   /** CP volume mount paths (paired by position with cpVolumeNames). */
   cpVolumeMountPaths?: string[];
   withConfigBundle?: boolean;
+  /** System prompt for the generated agent (Java create path only). */
+  systemPrompt?: string;
 }
 
 /**
@@ -184,6 +188,33 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
             `Agent "${options.name}" already exists. To update its configuration, edit agentcore/agentcore.json directly.`
           ),
         };
+      }
+
+      const languageValidation = validateLanguageMatrix(
+        {
+          language: options.language,
+          framework: options.framework,
+          protocol: options.protocol,
+          modelProvider: options.modelProvider,
+          build: options.buildType,
+          memory: options.memory,
+          sessionStorageMountPath: options.sessionStorageMountPath,
+          efsAccessPointArn: options.efsAccessPointArns,
+          s3AccessPointArn: options.s3AccessPointArns,
+          withConfigBundle: options.withConfigBundle,
+        },
+        project.agentCoreGateways.map(gateway => ({
+          name: gateway.name,
+          authorizerType: gateway.authorizerType,
+        }))
+      );
+      if (!languageValidation.valid) {
+        return { success: false, error: new ValidationError(languageValidation.error!) };
+      }
+      if (options.language === 'Java' && (project.payments ?? []).length > 0) {
+        console.warn(
+          'This project contains payment configuration for another agent; payments are not available to the new Java agent.'
+        );
       }
 
       if (options.type === 'import') {
@@ -278,10 +309,13 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
       )
       .option('--type <type>', 'Agent type: create, byo, or import [non-interactive]', 'create')
       .option('--build <type>', 'Build type: CodeZip or Container (default: CodeZip) [non-interactive]')
-      .option('--language <lang>', 'Language: Python (create), or Python/TypeScript/Other (BYO) [non-interactive]')
+      .option(
+        '--language <lang>',
+        'Language: Python or Java (create), or Python/TypeScript/Java/Other (BYO) [non-interactive]'
+      )
       .option(
         '--framework <fw>',
-        'Framework: Strands, LangChain_LangGraph, GoogleADK, OpenAIAgents, VercelAI [non-interactive]'
+        'Framework: Strands, LangChain_LangGraph, GoogleADK, OpenAIAgents, VercelAI, SpringAI [non-interactive]'
       )
       .option('--model-provider <provider>', 'Model provider: Bedrock, Anthropic, OpenAI, Gemini [non-interactive]')
       .option('--api-key <key>', 'API key for non-Bedrock providers [non-interactive]')
@@ -361,6 +395,10 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
         [] as string[]
       )
       .option('--with-config-bundle', 'Create a config bundle wired into the agent template [non-interactive]')
+      .option(
+        '--system-prompt <text>',
+        'System prompt for the generated agent (Java create path only) [non-interactive]'
+      )
       .option('--json', 'Output as JSON [non-interactive]')
       .action(async options => {
         if (!findConfigRoot()) {
@@ -504,6 +542,7 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
               cpVolumeNames: cliOptions.cpVolumeName ?? [],
               cpVolumeMountPaths: cliOptions.cpVolumeMountPath ?? [],
               withConfigBundle: cliOptions.withConfigBundle,
+              systemPrompt: cliOptions.systemPrompt,
             });
 
             if (!result.success) {
@@ -600,7 +639,7 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
       sdk: options.framework,
       modelProvider: options.modelProvider,
       memory: options.memory!,
-      language: options.language,
+      language: options.language as TemplateLanguage,
       protocol: options.protocol ?? 'HTTP',
       networkMode: options.networkMode as NetworkMode | undefined,
       subnets: parseCommaSeparatedList(options.subnets),
@@ -650,6 +689,7 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
         mountPath: (options.cpVolumeMountPaths ?? [])[i] ?? '',
       })),
       withConfigBundle: options.withConfigBundle,
+      systemPrompt: options.systemPrompt,
     };
 
     const agentPath = join(projectRoot, APP_DIR, options.name);
@@ -803,7 +843,7 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
       build: options.buildType,
       entrypoint: (options.entrypoint ?? 'main.py') as FilePath,
       codeLocation: codeLocation as DirectoryPath,
-      runtimeVersion: DEFAULT_PYTHON_VERSION,
+      ...(options.language !== 'Java' && { runtimeVersion: DEFAULT_PYTHON_VERSION }),
       protocol,
       ...(networkMode !== undefined && { networkMode }),
       ...(networkMode === 'VPC' &&
@@ -816,7 +856,7 @@ export class AgentPrimitive extends BasePrimitive<AddAgentOptions, RemovableReso
           },
         }),
       // MCP uses mcp.run() which is incompatible with the opentelemetry-instrument wrapper
-      ...(protocol === 'MCP' && { instrumentation: { enableOtel: false } }),
+      ...((protocol === 'MCP' || options.language === 'Java') && { instrumentation: { enableOtel: false } }),
       ...(options.requestHeaderAllowlist?.length && {
         requestHeaderAllowlist: options.requestHeaderAllowlist,
       }),

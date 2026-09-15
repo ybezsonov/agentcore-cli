@@ -19,7 +19,7 @@ import type {
   ProtocolMode,
   S3FilesAccessPointConfig,
   SDKFramework,
-  TargetLanguage,
+  TemplateLanguage,
 } from '../../../schema';
 import { checkCreateDependencies } from '../../external-requirements';
 import { initGitRepo, setupNodeProject, setupPythonProject, writeEnvFile, writeGitignore } from '../../operations';
@@ -136,7 +136,7 @@ export interface CreateWithAgentOptions {
   cwd: string;
   type?: 'create' | 'import';
   buildType?: BuildType;
-  language: TargetLanguage;
+  language: TemplateLanguage;
   framework?: SDKFramework;
   modelProvider?: ModelProvider;
   apiKey?: string;
@@ -409,6 +409,12 @@ export function getDryRunInfo(options: {
     wouldCreate.push(`${projectRoot}/app/${name}/tsconfig.json`);
     wouldCreate.push(`${projectRoot}/app/${name}/model/load.ts`);
     wouldCreate.push(`${projectRoot}/app/${name}/mcp_client/client.ts`);
+  } else if (language === 'Java') {
+    wouldCreate.push(`${projectRoot}/app/${name}/`);
+    wouldCreate.push(`${projectRoot}/app/${name}/pom.xml`);
+    wouldCreate.push(`${projectRoot}/app/${name}/Dockerfile`);
+    wouldCreate.push(`${projectRoot}/app/${name}/src/main/resources/application.properties`);
+    wouldCreate.push(`${projectRoot}/app/${name}/src/main/java/com/example/agent/AgentApplication.java`);
   }
 
   return {

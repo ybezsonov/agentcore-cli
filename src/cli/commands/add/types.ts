@@ -46,6 +46,7 @@ export interface AddAgentOptions extends VpcOptions {
   cpVolumeName?: string[];
   cpVolumeMountPath?: string[];
   withConfigBundle?: boolean;
+  systemPrompt?: string;
   json?: boolean;
 }
 

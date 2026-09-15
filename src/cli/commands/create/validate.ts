@@ -23,6 +23,7 @@ import {
   zipAccessPointPairs,
 } from '../shared/filesystem-utils';
 import { parseAndValidateLifecycleOptions } from '../shared/lifecycle-utils';
+import { validateLanguageMatrix } from '../shared/validate-language-matrix';
 import { validateVpcOptions } from '../shared/vpc-utils';
 import type { CreateOptions } from './types';
 import { existsSync } from 'fs';
@@ -105,6 +106,15 @@ export function validateCreateOptions(options: CreateOptions, cwd?: string): Val
     options.modelProvider = matchEnumValue(ModelProviderSchema, options.modelProvider) ?? options.modelProvider;
   if (options.build) options.build = matchEnumValue(BuildTypeSchema, options.build) ?? options.build;
 
+  // Command normalization owns Java defaults; validateLanguageMatrix remains side-effect free.
+  if (options.language === 'Java') {
+    options.protocol ??= 'HTTP';
+    options.framework ??= 'SpringAI';
+    options.modelProvider ??= 'Bedrock';
+    options.memory ??= 'none';
+    options.build ??= 'Container';
+  }
+
   // Validate protocol if provided
   let protocol: ProtocolMode = 'HTTP';
   if (options.protocol) {
@@ -122,6 +132,10 @@ export function validateCreateOptions(options: CreateOptions, cwd?: string): Val
       return { valid: false, error: `Invalid build type: ${options.build}. Use CodeZip or Container` };
     }
   }
+
+  const languageMatrixResult = validateLanguageMatrix(options);
+  if (!languageMatrixResult.valid) return languageMatrixResult;
+  protocol = (options.protocol as ProtocolMode | undefined) ?? protocol;
 
   // TypeScript only supports HTTP today; MCP and A2A templates have not been authored yet
   if (protocol !== 'HTTP' && options.language === 'TypeScript') {
@@ -179,7 +193,7 @@ export function validateCreateOptions(options: CreateOptions, cwd?: string): Val
     // Validate language
     const langResult = TargetLanguageSchema.safeParse(options.language);
     if (!langResult.success) {
-      return { valid: false, error: `Invalid language: ${options.language}. Use Python or TypeScript` };
+      return { valid: false, error: `Invalid language: ${options.language}. Use Python, TypeScript, or Java` };
     }
 
     // Validate framework
@@ -205,7 +219,7 @@ export function validateCreateOptions(options: CreateOptions, cwd?: string): Val
     // Framework must ship a template for the chosen language (e.g. Vercel AI is
     // TypeScript-only, the other open-source frameworks are Python-only).
     if (
-      (langResult.data === 'Python' || langResult.data === 'TypeScript') &&
+      (langResult.data === 'Python' || langResult.data === 'TypeScript' || langResult.data === 'Java') &&
       !isFrameworkSupportedForLanguage(langResult.data, fwResult.data)
     ) {
       const supported = getFrameworksForLanguage(langResult.data).join(', ');
@@ -242,7 +256,7 @@ export function validateCreateOptions(options: CreateOptions, cwd?: string): Val
   if (lifecycleResult.idleTimeout !== undefined) options.idleTimeout = lifecycleResult.idleTimeout;
   if (lifecycleResult.maxLifetime !== undefined) options.maxLifetime = lifecycleResult.maxLifetime;
 
-  // Filesystem mounts are not supported for TypeScript agents (no needsOs template blocks)
+  // Filesystem mounts are rejected by the shared matrix for Java and below for TypeScript.
   if (options.language === 'TypeScript') {
     if (options.sessionStorageMountPath) {
       return { valid: false, error: '--session-storage-mount-path is not supported for TypeScript agents' };

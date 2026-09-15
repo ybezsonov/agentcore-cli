@@ -51,13 +51,16 @@ export function useGenerateWizard(options?: UseGenerateWizardOptions) {
     if (hasInitialName) {
       filtered = filtered.filter(s => s !== 'projectName');
     }
+    if (config.language === 'Java') {
+      filtered = filtered.filter(s => s !== 'buildType');
+    }
     if (config.protocol === 'MCP') {
       filtered = filtered.filter(s => s !== 'sdk' && s !== 'modelProvider' && s !== 'apiKey');
     } else {
       if (config.modelProvider === 'Bedrock') {
         filtered = filtered.filter(s => s !== 'apiKey');
       }
-      if (sdkSelected && config.sdk === 'Strands') {
+      if (sdkSelected && (config.sdk === 'Strands' || config.sdk === 'SpringAI')) {
         const advancedIndex = filtered.indexOf('advanced');
         filtered = [...filtered.slice(0, advancedIndex), 'memory', ...filtered.slice(advancedIndex)];
       }
@@ -97,7 +100,7 @@ export function useGenerateWizard(options?: UseGenerateWizardOptions) {
         subSteps.push('idleTimeout', 'maxLifetime');
       }
       // Filesystem
-      if (advancedSettings.has('filesystem')) {
+      if (advancedSettings.has('filesystem') && config.language !== 'Java') {
         subSteps.push(
           'sessionStorageMountPath',
           'efsArn',
@@ -158,6 +161,19 @@ export function useGenerateWizard(options?: UseGenerateWizardOptions) {
   }, []);
 
   const setLanguage = useCallback((language: GenerateConfig['language']) => {
+    if (language === 'Java') {
+      setConfig(c => ({
+        ...c,
+        language,
+        buildType: 'Container',
+        protocol: 'HTTP',
+        sdk: 'SpringAI',
+        modelProvider: 'Bedrock',
+        memory: 'none',
+      }));
+      setStep('protocol');
+      return;
+    }
     setConfig(c => ({ ...c, language }));
     setStep('buildType');
   }, []);
@@ -196,7 +212,7 @@ export function useGenerateWizard(options?: UseGenerateWizardOptions) {
       // Non-Bedrock providers need API key step
       if (modelProvider !== 'Bedrock') {
         setStep('apiKey');
-      } else if (config.sdk === 'Strands') {
+      } else if (config.sdk === 'Strands' || config.sdk === 'SpringAI') {
         setStep('memory');
       } else {
         setStep('advanced');

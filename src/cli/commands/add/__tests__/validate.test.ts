@@ -89,6 +89,20 @@ describe('validate', () => {
   afterEach(() => vi.clearAllMocks());
 
   describe('validateAddAgentOptions', () => {
+    it('accepts --system-prompt for a Java create agent and rejects it elsewhere', () => {
+      const java: AddAgentOptions = { name: 'JavaAgent', language: 'Java', systemPrompt: 'You plan trips.' };
+      expect(validateAddAgentOptions({ ...java }).valid).toBe(true);
+
+      expect(validateAddAgentOptions({ ...java, systemPrompt: '   ' })).toEqual({
+        valid: false,
+        error: '--system-prompt must not be empty',
+      });
+      expect(validateAddAgentOptions({ ...validAgentOptionsByo, systemPrompt: 'You plan trips.' })).toEqual({
+        valid: false,
+        error: '--system-prompt is supported only when creating a Java agent',
+      });
+    });
+
     // AC1: All required fields validated
     it('returns error for missing required fields', () => {
       const requiredFields: { field: keyof AddAgentOptions; error: string }[] = [
@@ -212,7 +226,7 @@ describe('validate', () => {
     it('returns error for create path with Other language', () => {
       const result = validateAddAgentOptions({ ...validAgentOptionsCreate, language: 'Other' });
       expect(result.valid).toBe(false);
-      expect(result.error?.includes('Python')).toBeTruthy();
+      expect(result.error).toBe('Create path does not support language Other');
     });
 
     // AC6: Create path requires memory

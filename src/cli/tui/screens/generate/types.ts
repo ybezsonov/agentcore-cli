@@ -10,6 +10,7 @@ import type {
   S3FilesAccessPointConfig,
   SDKFramework,
   TargetLanguage,
+  TemplateLanguage,
 } from '../../../../schema';
 import {
   DEFAULT_MODEL_IDS,
@@ -54,7 +55,7 @@ export type GenerateStep =
 export type MemoryOption = 'none' | 'shortTerm' | 'longAndShortTerm';
 
 // Re-export types from schema for convenience
-export type { BuildType, ModelProvider, ProtocolMode, SDKFramework, TargetLanguage };
+export type { BuildType, ModelProvider, ProtocolMode, SDKFramework, TargetLanguage, TemplateLanguage };
 
 export interface GenerateConfig {
   projectName: string;
@@ -67,7 +68,7 @@ export interface GenerateConfig {
   /** API key for non-Bedrock model providers (optional - can be added later) */
   apiKey?: string;
   memory: MemoryOption;
-  language: TargetLanguage;
+  language: TemplateLanguage;
   networkMode?: NetworkMode;
   subnets?: string[];
   securityGroups?: string[];
@@ -94,6 +95,8 @@ export interface GenerateConfig {
   capacityProviderVolumes?: CapacityProviderVolumeConfig[];
   /** When true, create a config bundle wired into the agent template */
   withConfigBundle?: boolean;
+  /** System prompt override for the generated agent (Java only; defaults to a generic assistant prompt) */
+  systemPrompt?: string;
 }
 
 /** Base steps - apiKey, memory, subnets, securityGroups are conditionally added based on selections */
@@ -145,6 +148,7 @@ export const STEP_LABELS: Record<GenerateStep, string> = {
 export const LANGUAGE_OPTIONS = [
   { id: 'Python', title: 'Python' },
   { id: 'TypeScript', title: 'TypeScript' },
+  { id: 'Java', title: 'Java' },
 ] as const;
 
 export const BUILD_TYPE_OPTIONS = [
@@ -163,8 +167,8 @@ export const PROTOCOL_OPTIONS = [
  * Get protocol options filtered by target language.
  * TypeScript only supports HTTP.
  */
-export function getProtocolOptionsForLanguage(language?: TargetLanguage) {
-  if (language === 'TypeScript') {
+export function getProtocolOptionsForLanguage(language?: TemplateLanguage) {
+  if (language === 'TypeScript' || language === 'Java') {
     return PROTOCOL_OPTIONS.filter(option => option.id === 'HTTP');
   }
   return [...PROTOCOL_OPTIONS];
@@ -176,6 +180,7 @@ export const SDK_OPTIONS = [
   { id: 'GoogleADK', title: 'Google ADK', description: 'Google Agent Development Kit' },
   { id: 'OpenAIAgents', title: 'OpenAI Agents', description: 'OpenAI native agent SDK' },
   { id: 'VercelAI', title: 'Vercel AI SDK', description: 'Vercel AI SDK for TypeScript agents' },
+  { id: 'SpringAI', title: 'Spring AI', description: 'Spring AI for Java agents' },
 ] as const;
 
 /**
@@ -183,10 +188,10 @@ export const SDK_OPTIONS = [
  * Frameworks must ship a template for the chosen language — e.g. Vercel AI is
  * TypeScript-only, so it never appears for Python agents.
  */
-export function getSDKOptionsForProtocol(protocol: ProtocolMode, language?: TargetLanguage) {
+export function getSDKOptionsForProtocol(protocol: ProtocolMode, language?: TemplateLanguage) {
   const supportedFrameworks = PROTOCOL_FRAMEWORK_MATRIX[protocol];
   const byProtocol = SDK_OPTIONS.filter(option => supportedFrameworks.includes(option.id));
-  if (language === 'Python' || language === 'TypeScript') {
+  if (language) {
     const byLanguage = getFrameworksForLanguage(language);
     return byProtocol.filter(option => byLanguage.includes(option.id));
   }

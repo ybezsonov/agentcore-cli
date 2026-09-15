@@ -129,15 +129,24 @@ export function mapGenerateConfigToAgent(config: GenerateConfig): AgentEnvSpec {
     ...(needsActorHeader && !(config.requestHeaderAllowlist ?? []).includes(ACTOR_ID_HEADER) ? [ACTOR_ID_HEADER] : []),
   ];
 
+  const build = config.buildType ?? 'CodeZip';
+  const entrypoint =
+    config.language === 'Java'
+      ? DEFAULT_ENTRYPOINT_BY_LANGUAGE.Java
+      : config.language === 'TypeScript'
+        ? DEFAULT_ENTRYPOINT_BY_LANGUAGE.TypeScript
+        : DEFAULT_PYTHON_ENTRYPOINT;
+
   return {
     name: config.projectName,
-    build: config.buildType ?? 'CodeZip',
+    build,
     ...(config.dockerfile && { dockerfile: config.dockerfile }),
-    entrypoint: (config.language === 'TypeScript'
-      ? DEFAULT_ENTRYPOINT_BY_LANGUAGE.TypeScript
-      : DEFAULT_PYTHON_ENTRYPOINT) as FilePath,
+    entrypoint: entrypoint as FilePath,
     codeLocation: codeLocation as DirectoryPath,
-    runtimeVersion: config.language === 'TypeScript' ? DEFAULT_RUNTIME_BY_LANGUAGE.TypeScript : DEFAULT_PYTHON_VERSION,
+    ...(config.language !== 'Java' && {
+      runtimeVersion:
+        config.language === 'TypeScript' ? DEFAULT_RUNTIME_BY_LANGUAGE.TypeScript : DEFAULT_PYTHON_VERSION,
+    }),
     ...(networkMode !== undefined && { networkMode }),
     protocol,
     ...(networkMode === 'VPC' &&
@@ -148,7 +157,7 @@ export function mapGenerateConfigToAgent(config: GenerateConfig): AgentEnvSpec {
           securityGroups: config.securityGroups,
           // Only a Container build carries a vpcId; guard so a stale value left over from a
           // Container→CodeZip switch in the wizard doesn't leak into a CodeZip networkConfig.
-          ...(config.buildType === 'Container' && config.vpcId && { vpcId: config.vpcId }),
+          ...(build === 'Container' && config.vpcId && { vpcId: config.vpcId }),
         },
       }),
     ...(headerAllowlist.length > 0 && {
@@ -178,7 +187,7 @@ export function mapGenerateConfigToAgent(config: GenerateConfig): AgentEnvSpec {
       config.s3AccessPoints,
       config.capacityProviderVolumes
     ),
-    ...(protocol === 'MCP' && { instrumentation: { enableOtel: false } }),
+    ...((protocol === 'MCP' || config.language === 'Java') && { instrumentation: { enableOtel: false } }),
   };
 }
 
@@ -291,7 +300,7 @@ export async function mapGenerateConfigToRenderConfig(
 ): Promise<AgentRenderConfig> {
   const isMcp = config.protocol === 'MCP';
   const gatewayProviders = isMcp ? [] : await mapGatewaysToGatewayProviders();
-  const enableOtel = !isMcp && config.language !== 'TypeScript';
+  const enableOtel = !isMcp && config.language !== 'TypeScript' && config.language !== 'Java';
 
   return {
     name: config.projectName,
@@ -306,14 +315,17 @@ export async function mapGenerateConfigToRenderConfig(
           : config.memory !== 'none',
     hasIdentity: isMcp ? false : identityProviders.length > 0,
     hasGateway: gatewayProviders.length > 0,
-    hasPayment: await (async () => {
-      try {
-        const spec = await new ConfigIO().readProjectSpec();
-        return (spec.payments ?? []).length > 0;
-      } catch {
-        return false;
-      }
-    })(),
+    hasPayment:
+      config.language === 'Java'
+        ? false
+        : await (async () => {
+            try {
+              const spec = await new ConfigIO().readProjectSpec();
+              return (spec.payments ?? []).length > 0;
+            } catch {
+              return false;
+            }
+          })(),
     isVpc: config.networkMode === 'VPC',
     buildType: config.buildType,
     memoryProviders:
@@ -331,5 +343,9 @@ export async function mapGenerateConfigToRenderConfig(
     needsOs: !!config.sessionStorageMountPath || !!config.efsAccessPoints?.length || !!config.s3AccessPoints?.length,
     enableOtel,
     hasConfigBundle: config.withConfigBundle,
+    ...(config.language === 'Java' && {
+      modelMaxTokens: 4096,
+      systemPrompt: config.systemPrompt ?? `You are a helpful assistant for ${config.projectName}.`,
+    }),
   };
 }

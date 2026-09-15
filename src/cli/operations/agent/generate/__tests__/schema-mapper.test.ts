@@ -736,3 +736,43 @@ describe('mapAddAgentConfigToGenerateConfig - Container + VPC vpcId', () => {
     });
   });
 });
+
+describe('Java generation mapping', () => {
+  const javaConfig: GenerateConfig = {
+    ...baseConfig,
+    projectName: 'JavaAgent',
+    language: 'Java',
+    sdk: 'SpringAI',
+    buildType: 'Container',
+  };
+
+  it('emits the container placeholder without runtimeVersion or tool connections', () => {
+    const result = mapGenerateConfigToAgent(javaConfig);
+    expect(result.build).toBe('Container');
+    expect(result.entrypoint).toBe('main.py');
+    expect(result.runtimeVersion).toBeUndefined();
+    expect(result.instrumentation).toEqual({ enableOtel: false });
+    expect(result.connections).toBeUndefined();
+  });
+
+  it('maps Java renderer defaults without OTel', async () => {
+    const result = await mapGenerateConfigToRenderConfig(javaConfig, []);
+    expect(result).toMatchObject({
+      targetLanguage: 'Java',
+      sdkFramework: 'SpringAI',
+      modelProvider: 'Bedrock',
+      modelMaxTokens: 4096,
+      systemPrompt: 'You are a helpful assistant for JavaAgent.',
+      enableOtel: false,
+      hasPayment: false,
+    });
+  });
+
+  it('uses an explicit Java system prompt instead of the default', async () => {
+    const result = await mapGenerateConfigToRenderConfig(
+      { ...javaConfig, systemPrompt: 'You are a travel planner.' },
+      []
+    );
+    expect(result.systemPrompt).toBe('You are a travel planner.');
+  });
+});
