@@ -152,7 +152,8 @@ export function GenerateWizardUI({
       // A framework template that gives its own Dockerfile has no custom Dockerfile option.
       (o.id !== 'dockerfile' ||
         (wizard.config.buildType === 'Container' && !getTemplateProfile(wizard.config.sdk)?.runtime?.dockerfile)) &&
-      (o.id !== 'filesystem' || wizard.config.language !== 'TypeScript')
+      (o.id !== 'filesystem' || (wizard.config.language !== 'TypeScript' && wizard.config.language !== 'Java')) &&
+      (o.id !== 'configBundle' || wizard.config.language !== 'Java')
   ).map(o => ({ id: o.id, title: o.title, description: o.description }));
 
   const handleSelect = (item: SelectableItem) => {

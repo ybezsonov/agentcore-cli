@@ -64,8 +64,15 @@ function computeCredentialName(projectName: string, providerName: string): strin
  * - "none" -> empty array (no memory)
  * - "shortTerm" -> [Memory with no strategies] (just base memory with expiration)
  * - "longAndShortTerm" -> [Memory with Semantic + Summarization + UserPreference strategies]
+ *
+ * Java omits the EPISODIC strategy: the Spring AI AgentCore SDK also reads the episodic reflection namespace, which the
+ * deployed runtime role is not yet granted.
  */
-export function mapGenerateInputToMemories(memory: MemoryOption, projectName: string): Memory[] {
+export function mapGenerateInputToMemories(
+  memory: MemoryOption,
+  projectName: string,
+  language?: GenerateConfig['language']
+): Memory[] {
   if (memory === 'none') {
     return [];
   }
@@ -77,6 +84,7 @@ export function mapGenerateInputToMemories(memory: MemoryOption, projectName: st
   if (memory === 'longAndShortTerm') {
     const strategyTypes: MemoryStrategyType[] = ['SEMANTIC', 'USER_PREFERENCE', 'SUMMARIZATION', 'EPISODIC'];
     for (const type of strategyTypes) {
+      if (type === 'EPISODIC' && language === 'Java') continue;
       const defaultTemplates = DEFAULT_STRATEGY_NAMESPACE_TEMPLATES[type];
       strategies.push({
         type,
@@ -171,7 +179,10 @@ export function mapGenerateConfigToAgent(generateConfig: GenerateConfig): AgentE
       ? DEFAULT_ENTRYPOINT_BY_LANGUAGE.TypeScript
       : DEFAULT_PYTHON_ENTRYPOINT) as FilePath,
     codeLocation: codeLocation as DirectoryPath,
-    runtimeVersion: config.language === 'TypeScript' ? DEFAULT_RUNTIME_BY_LANGUAGE.TypeScript : DEFAULT_PYTHON_VERSION,
+    ...(config.language !== 'Java' && {
+      runtimeVersion:
+        config.language === 'TypeScript' ? DEFAULT_RUNTIME_BY_LANGUAGE.TypeScript : DEFAULT_PYTHON_VERSION,
+    }),
     ...(networkMode !== undefined && { networkMode }),
     protocol,
     ...(networkMode === 'VPC' &&
@@ -212,7 +223,7 @@ export function mapGenerateConfigToAgent(generateConfig: GenerateConfig): AgentE
       config.s3AccessPoints,
       config.capacityProviderVolumes
     ),
-    ...(protocol === 'MCP' && { instrumentation: { enableOtel: false } }),
+    ...((protocol === 'MCP' || config.language === 'Java') && { instrumentation: { enableOtel: false } }),
     ...templateRuntimeFields(config),
   };
 }
@@ -223,7 +234,7 @@ export function mapGenerateConfigToAgent(generateConfig: GenerateConfig): AgentE
 export function mapGenerateConfigToResources(config: GenerateConfig): GenerateConfigMappingResult {
   return {
     agent: mapGenerateConfigToAgent(config),
-    memories: mapGenerateInputToMemories(config.memory, config.projectName),
+    memories: mapGenerateInputToMemories(config.memory, config.projectName, config.language),
     credentials: mapModelProviderToCredentials(config.modelProvider, config.projectName),
   };
 }
@@ -239,13 +250,17 @@ function computeMemoryEnvVarName(memoryName: string): string {
 /**
  * Maps memory option to memory providers for template rendering.
  */
-function mapMemoryOptionToMemoryProviders(memory: MemoryOption, projectName: string): MemoryProviderRenderConfig[] {
+function mapMemoryOptionToMemoryProviders(
+  memory: MemoryOption,
+  projectName: string,
+  language: GenerateConfig['language']
+): MemoryProviderRenderConfig[] {
   if (memory === 'none') {
     return [];
   }
 
   const memoryName = `${projectName}Memory`;
-  const strategies = mapGenerateInputToMemories(memory, projectName)[0]?.strategies ?? [];
+  const strategies = mapGenerateInputToMemories(memory, projectName, language)[0]?.strategies ?? [];
 
   return [
     {
@@ -355,7 +370,7 @@ export async function mapGenerateConfigToRenderConfig(
     memoryProviders:
       isMcp || (config.language === 'TypeScript' && config.sdk !== 'Strands')
         ? []
-        : mapMemoryOptionToMemoryProviders(config.memory, config.projectName),
+        : mapMemoryOptionToMemoryProviders(config.memory, config.projectName, config.language),
     identityProviders: isMcp ? [] : identityProviders,
     gatewayProviders,
     gatewayAuthTypes: [...new Set(gatewayProviders.map(g => g.authType))],
@@ -367,5 +382,6 @@ export async function mapGenerateConfigToRenderConfig(
     needsOs: !!config.sessionStorageMountPath || !!config.efsAccessPoints?.length || !!config.s3AccessPoints?.length,
     enableOtel,
     hasConfigBundle: config.withConfigBundle,
+    systemPrompt: config.systemPrompt,
   };
 }

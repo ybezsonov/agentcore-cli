@@ -1,5 +1,6 @@
 import type { AgentEnvSpec, BuildType, ModelProvider, SDKFramework, TargetLanguage } from '../../schema';
 import { BMA_TEMPLATE_PROFILE } from './bmaProfile';
+import { SPRING_TEMPLATE_PROFILE } from './springProfile';
 
 /**
  * What a framework template needs from the CLI. The commands, the wizard, and the schema mapper
@@ -35,6 +36,7 @@ export interface TemplateRuntimeProfile {
 
 const TEMPLATE_PROFILES: Partial<Record<SDKFramework, TemplateProfile>> = {
   BedrockManagedAgents: BMA_TEMPLATE_PROFILE,
+  SpringAI: SPRING_TEMPLATE_PROFILE,
 };
 
 export function getTemplateProfile(framework: string | undefined): TemplateProfile | undefined {

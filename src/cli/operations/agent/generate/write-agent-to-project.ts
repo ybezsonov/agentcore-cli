@@ -27,7 +27,7 @@ export async function writeAgentToProject(config: GenerateConfig, options?: Writ
   // Note: config.projectName is actually the agent name (GenerateConfig naming is confusing)
   const agentName = config.projectName;
   const agent = mapGenerateConfigToAgent(config);
-  const memories = mapGenerateInputToMemories(config.memory, agentName);
+  const memories = mapGenerateInputToMemories(config.memory, agentName, config.language);
 
   if (configIO.configExists('project')) {
     const project = await configIO.readProjectSpec();

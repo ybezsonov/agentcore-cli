@@ -10,6 +10,7 @@ import {
 import type { DeployedState } from '../../../../schema';
 import { getCredentialProvider } from '../../../aws/account';
 import { validateFilesystemMountsConfiguration } from '../../../commands/shared/filesystem-utils';
+import { validateLanguageMatrix } from '../../../commands/shared/validate-language-matrix';
 import { getErrorMessage } from '../../../errors';
 import { CreateLogger } from '../../../logging';
 import { initGitRepo, setupNodeProject, setupPythonProject, writeEnvFile, writeGitignore } from '../../../operations';
@@ -293,6 +294,21 @@ export function useCreateFlow(cwd: string): CreateFlowState {
       setLogFilePath(logger.logFilePath);
       logger.log(`Starting project creation: ${projectName}`);
       logger.log(`Project root: ${projectRoot}`);
+
+      // Same language matrix as `agentcore create`, checked before anything is written. A new project
+      // has no gateways yet.
+      if (addAgentConfig) {
+        const languageValidation = validateLanguageMatrix({
+          ...addAgentConfig,
+          build: addAgentConfig.buildType,
+          efsAccessPointArn: addAgentConfig.efsAccessPoints?.map(ap => ap.accessPointArn),
+          s3AccessPointArn: addAgentConfig.s3AccessPoints?.map(ap => ap.accessPointArn),
+        });
+        if (!languageValidation.valid) {
+          updateStep(stepIndex, { status: 'error', error: languageValidation.error });
+          return { success: false, error: new Error(languageValidation.error) };
+        }
+      }
 
       try {
         // Step: Create project directory and config files

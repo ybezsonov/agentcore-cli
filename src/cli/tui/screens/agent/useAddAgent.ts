@@ -4,15 +4,17 @@ import {
   ConfigIO,
   NoProjectError,
   type Result,
+  ValidationError,
   findConfigRoot,
   setEnvVar,
 } from '../../../../lib';
-import type { AgentEnvSpec, DirectoryPath, FilePath } from '../../../../schema';
+import type { AgentEnvSpec, DirectoryPath, FilePath, TemplateLanguage } from '../../../../schema';
 import { getCredentialProvider } from '../../../aws/account';
 import {
   buildFilesystemConfigurations,
   validateFilesystemMountsConfiguration,
 } from '../../../commands/shared/filesystem-utils';
+import { validateNewAgentLanguage } from '../../../commands/shared/validate-language-matrix';
 import { type PythonSetupResult, setupPythonProject } from '../../../operations';
 import { createConfigBundleForAgent } from '../../../operations/agent/config-bundle-defaults';
 import {
@@ -58,6 +60,7 @@ export interface AddAgentCreateResult {
   projectName: string;
   projectPath: string;
   pythonSetupResult?: PythonSetupResult;
+  warnings?: string[];
 }
 
 export interface AddAgentByoResult {
@@ -65,6 +68,7 @@ export interface AddAgentByoResult {
   type: 'byo';
   agentName: string;
   projectName: string;
+  warnings?: string[];
 }
 
 export interface AddAgentError {
@@ -92,8 +96,9 @@ export function mapByoConfigToAgent(config: AddAgentConfig): AgentEnvSpec {
     ...(config.dockerfile && { dockerfile: config.dockerfile }),
     entrypoint: config.entrypoint as FilePath,
     codeLocation: config.codeLocation as DirectoryPath,
-    runtimeVersion: config.pythonVersion,
+    ...(config.language !== 'Java' && { runtimeVersion: config.pythonVersion }),
     protocol: config.protocol ?? 'HTTP',
+    ...(config.language === 'Java' && { instrumentation: { enableOtel: false } }),
     ...(networkMode !== undefined && { networkMode }),
     ...(networkMode === 'VPC' &&
       config.subnets &&
@@ -150,7 +155,7 @@ export function mapAddAgentConfigToGenerateConfig(config: AddAgentConfig): Gener
     sdk: config.framework,
     modelProvider: config.modelProvider,
     memory: config.memory,
-    language: config.language,
+    language: config.language as TemplateLanguage,
     networkMode: config.networkMode,
     subnets: config.subnets,
     securityGroups: config.securityGroups,
@@ -221,7 +226,7 @@ export function useAddAgent() {
 
 type AddAgentInnerResult = Result<{ outcome: AddAgentCreateResult | AddAgentByoResult }>;
 
-async function addAgentInner(config: AddAgentConfig): Promise<AddAgentInnerResult> {
+export async function addAgentInner(config: AddAgentConfig): Promise<AddAgentInnerResult> {
   const configBaseDir = findConfigRoot();
   if (!configBaseDir) {
     return { success: false, error: new NoProjectError() };
@@ -237,6 +242,20 @@ async function addAgentInner(config: AddAgentConfig): Promise<AddAgentInnerResul
   const existingAgent = project.runtimes.find(agent => agent.name === config.name);
   if (existingAgent) {
     return { success: false, error: new AgentAlreadyExistsError(config.name) };
+  }
+
+  // Same language matrix as `agentcore add agent`, checked before anything is written.
+  const languageValidation = validateNewAgentLanguage(
+    {
+      ...config,
+      build: config.buildType,
+      efsAccessPointArn: config.efsAccessPoints?.map(ap => ap.accessPointArn),
+      s3AccessPointArn: config.s3AccessPoints?.map(ap => ap.accessPointArn),
+    },
+    project
+  );
+  if (!languageValidation.valid) {
+    return { success: false, error: new ValidationError(languageValidation.error!) };
   }
 
   // Async filesystem validation (Level 1–3) for create and byo paths
@@ -281,7 +300,7 @@ async function addAgentInner(config: AddAgentConfig): Promise<AddAgentInnerResul
   if (!outcome.ok) {
     return { success: false, error: new Error(outcome.error) };
   }
-  return { success: true, outcome };
+  return { success: true, outcome: { ...outcome, warnings: languageValidation.warnings } };
 }
 
 /**

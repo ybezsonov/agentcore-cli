@@ -25,6 +25,7 @@ import {
   zipAccessPointPairs,
 } from '../shared/filesystem-utils';
 import { parseAndValidateLifecycleOptions } from '../shared/lifecycle-utils';
+import { applyJavaDefaults, validateLanguageMatrix } from '../shared/validate-language-matrix';
 import { validateVpcOptions } from '../shared/vpc-utils';
 import type { CreateOptions } from './types';
 import { existsSync } from 'fs';
@@ -86,6 +87,9 @@ export function validateCreateOptions(options: CreateOptions, cwd?: string): Val
       return { valid: false, error: '--framework is required for import (Strands or LangChain_LangGraph)' };
     const fw = matchEnumValue(SDKFrameworkSchema, options.framework) ?? options.framework;
     options.framework = fw;
+    const language = options.language && (matchEnumValue(TargetLanguageSchema, options.language) ?? options.language);
+    const importMatrixResult = validateLanguageMatrix({ language, framework: fw });
+    if (!importMatrixResult.valid) return importMatrixResult;
     if (fw !== 'Strands' && fw !== 'LangChain_LangGraph') {
       return { valid: false, error: `Import only supports Strands or LangChain_LangGraph, got: ${options.framework}` };
     }
@@ -107,8 +111,12 @@ export function validateCreateOptions(options: CreateOptions, cwd?: string): Val
     options.modelProvider = matchEnumValue(ModelProviderSchema, options.modelProvider) ?? options.modelProvider;
   if (options.build) options.build = matchEnumValue(BuildTypeSchema, options.build) ?? options.build;
 
+  applyJavaDefaults(options);
   // The framework template can need some options and give defaults for others.
   applyTemplateOptionDefaults(options.framework, options);
+  // The language matrix runs first so a Java option gets its own message, not the profile's.
+  const languageMatrixResult = validateLanguageMatrix(options);
+  if (!languageMatrixResult.valid) return languageMatrixResult;
   const templateError = validateTemplateOptions(options.framework, options);
   if (templateError) {
     return { valid: false, error: templateError };
@@ -188,7 +196,7 @@ export function validateCreateOptions(options: CreateOptions, cwd?: string): Val
     // Validate language
     const langResult = TargetLanguageSchema.safeParse(options.language);
     if (!langResult.success) {
-      return { valid: false, error: `Invalid language: ${options.language}. Use Python or TypeScript` };
+      return { valid: false, error: `Invalid language: ${options.language}. Use Python, TypeScript, or Java` };
     }
 
     // Validate framework
@@ -214,7 +222,7 @@ export function validateCreateOptions(options: CreateOptions, cwd?: string): Val
     // Framework must ship a template for the chosen language (e.g. Vercel AI is
     // TypeScript-only, the other open-source frameworks are Python-only).
     if (
-      (langResult.data === 'Python' || langResult.data === 'TypeScript') &&
+      (langResult.data === 'Python' || langResult.data === 'TypeScript' || langResult.data === 'Java') &&
       !isFrameworkSupportedForLanguage(langResult.data, fwResult.data)
     ) {
       const supported = getFrameworksForLanguage(langResult.data).join(', ');

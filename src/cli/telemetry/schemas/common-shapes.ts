@@ -65,6 +65,7 @@ export const AgentFramework = z.enum([
   'googleadk',
   'openaiagents',
   'bedrockmanagedagents',
+  'springai',
 ]);
 export const GatewayTargetHost = z.enum(['lambda', 'agentcoreruntime']);
 export const GatewayTargetType = z.enum([
@@ -90,7 +91,7 @@ export const GATEWAY_TARGET_TYPE_MAP: Record<string, z.infer<typeof GatewayTarge
   passthrough: 'passthrough',
   webSearch: 'web-search',
 };
-export const AgentLanguage = z.enum(['python', 'typescript', 'other']);
+export const AgentLanguage = z.enum(['python', 'typescript', 'java', 'other']);
 export const EvaluatorLevel = z.enum(['session', 'trace', 'tool_call']);
 export const MemoryType = z.enum(['none', 'shortterm', 'longandshortterm']);
 export const Mode = z.enum(['cli', 'tui']);

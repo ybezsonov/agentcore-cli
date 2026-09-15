@@ -54,6 +54,7 @@ type FlowState =
       projectName: string;
       projectPath: string;
       config: AddAgentConfig;
+      warnings?: string[];
       loading?: boolean;
       loadingMessage?: string;
     }
@@ -62,6 +63,7 @@ type FlowState =
       agentName: string;
       projectName: string;
       config: AddAgentConfig;
+      warnings?: string[];
       loading?: boolean;
       loadingMessage?: string;
     }
@@ -334,6 +336,7 @@ export function AddFlow(props: AddFlowProps) {
                 projectName: result.projectName,
                 projectPath: result.projectPath,
                 config,
+                warnings: result.warnings,
               });
             } else {
               setFlow({
@@ -341,6 +344,7 @@ export function AddFlow(props: AddFlowProps) {
                 agentName: result.agentName,
                 projectName: result.projectName,
                 config,
+                warnings: result.warnings,
               });
             }
           } else {
@@ -401,6 +405,11 @@ export function AddFlow(props: AddFlowProps) {
             <Box flexDirection="column">
               <AgentAddedSummary config={flow.config} projectName={flow.projectName} projectPath={flow.projectPath} />
               <Box marginTop={1} flexDirection="column">
+                {flow.warnings?.map(warning => (
+                  <Text key={warning} color="yellow">
+                    Warning: {warning}
+                  </Text>
+                ))}
                 <Text color="yellow">
                   Note: {memoryNotePrefix}
                   <Link url={`https://github.com/aws/agentcore-cli/blob/main/docs/memory.md${memoryDocAnchor}`}>
@@ -442,6 +451,11 @@ export function AddFlow(props: AddFlowProps) {
             <Box flexDirection="column">
               <AgentAddedSummary config={flow.config} projectName={flow.projectName} />
               <Box marginTop={1} flexDirection="column">
+                {flow.warnings?.map(warning => (
+                  <Text key={warning} color="yellow">
+                    Warning: {warning}
+                  </Text>
+                ))}
                 <Text color="yellow">
                   Note: {memoryNotePrefix}
                   <Link url={`https://github.com/aws/agentcore-cli/blob/main/docs/memory.md${memoryDocAnchor}`}>

@@ -31,4 +31,6 @@ export const prereqs = {
   npm: hasCommand('npm'),
   git: hasCommand('git'),
   uv: hasCommand('uv'),
+  /** Generated Java agents need a JDK 21+ and Maven 3.9+ to build and run. */
+  java: hasCommand('java') && hasCommand('mvn'),
 };

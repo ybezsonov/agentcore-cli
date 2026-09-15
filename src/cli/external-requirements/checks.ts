@@ -350,6 +350,22 @@ export async function checkCreateDependencies(
     }
   }
 
+  // Check Maven (warning if missing, only for Java local development)
+  if (language === 'Java') {
+    const mvnAvailable = await checkBinaryAvailable('mvn');
+    checks.push({
+      binary: 'mvn',
+      severity: 'warn',
+      available: mvnAvailable,
+      installHint: 'Install Maven 3.9+ from https://maven.apache.org/install.html',
+    });
+    if (!mvnAvailable) {
+      warnings.push(
+        "'mvn' not found. Required for Java local development. Install Maven 3.9+ from https://maven.apache.org/install.html"
+      );
+    }
+  }
+
   // Check npm (error if missing)
   const npmAvailable = await checkBinaryAvailable('npm');
   checks.push({
@@ -396,7 +412,7 @@ export async function checkCreateDependencies(
  * Check if a binary is available in PATH.
  * Uses multiple fallback strategies for cross-platform compatibility.
  */
-async function checkBinaryAvailable(binary: string): Promise<boolean> {
+export async function checkBinaryAvailable(binary: string): Promise<boolean> {
   // Try multiple detection strategies
   const checks = [
     // Primary: use 'where' on Windows, 'which' on Unix

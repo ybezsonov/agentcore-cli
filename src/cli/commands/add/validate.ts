@@ -31,6 +31,7 @@ import { ARN_VALIDATION_MESSAGE, isValidArn } from '../shared/arn-utils';
 import { validateHeaderAllowlist } from '../shared/header-utils';
 import { MAX_INDEXED_KEYS, parseIndexedKeyArg } from '../shared/indexed-key-parser';
 import { parseAndValidateLifecycleOptions } from '../shared/lifecycle-utils';
+import { applyJavaDefaults, validateLanguageMatrix } from '../shared/validate-language-matrix';
 import { validateVpcOptions } from '../shared/vpc-utils';
 import { validateJwtAuthorizerOptions } from './auth-options';
 import type {
@@ -135,8 +136,12 @@ export function validateAddAgentOptions(options: AddAgentOptions): ValidationRes
       (matchEnumValue(TargetLanguageSchema, options.language) as typeof options.language) ?? options.language;
   if (options.build) options.build = matchEnumValue(BuildTypeSchema, options.build) ?? options.build;
 
+  applyJavaDefaults(options);
   // The framework template can need some options and give defaults for others.
   applyTemplateOptionDefaults(options.framework, options);
+  // The language matrix runs first so a Java option gets its own message, not the profile's.
+  const languageMatrixResult = validateLanguageMatrix(options);
+  if (!languageMatrixResult.valid) return languageMatrixResult;
   const templateError = validateTemplateOptions(options.framework, options);
   if (templateError) {
     return { valid: false, error: templateError };
@@ -161,6 +166,15 @@ export function validateAddAgentOptions(options: AddAgentOptions): ValidationRes
     const buildResult = BuildTypeSchema.safeParse(options.build);
     if (!buildResult.success) {
       return { valid: false, error: `Invalid build type: ${options.build}. Use CodeZip or Container` };
+    }
+  }
+
+  if (options.systemPrompt !== undefined) {
+    if ((options.type ?? 'create') !== 'create' || options.language !== 'Java') {
+      return { valid: false, error: '--system-prompt is supported only when creating a Java agent' };
+    }
+    if (!options.systemPrompt.trim()) {
+      return { valid: false, error: '--system-prompt must not be empty' };
     }
   }
 
@@ -301,12 +315,12 @@ export function validateAddAgentOptions(options: AddAgentOptions): ValidationRes
     }
   } else {
     if (options.language === 'Other') {
-      return { valid: false, error: 'Create path only supports Python or TypeScript' };
+      return { valid: false, error: 'Create path only supports Python, TypeScript, or Java' };
     }
     // Framework must ship a template for the chosen language (e.g. Vercel AI is
     // TypeScript-only, the other open-source frameworks are Python-only).
     if (
-      (langResult.data === 'Python' || langResult.data === 'TypeScript') &&
+      (langResult.data === 'Python' || langResult.data === 'TypeScript' || langResult.data === 'Java') &&
       !isFrameworkSupportedForLanguage(langResult.data, fwResult.data)
     ) {
       const supported = getFrameworksForLanguage(langResult.data).join(', ');
