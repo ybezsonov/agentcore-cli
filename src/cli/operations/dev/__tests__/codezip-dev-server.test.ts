@@ -65,6 +65,7 @@ describe('CodeZipDevServer spawn config', () => {
       directory: '/project/app',
       hasConfig: true,
       isPython: true,
+      isJava: false,
       buildType: 'CodeZip',
       protocol: 'HTTP',
     };
@@ -86,6 +87,7 @@ describe('CodeZipDevServer spawn config', () => {
       directory: '/project/app',
       hasConfig: true,
       isPython: true,
+      isJava: false,
       buildType: 'CodeZip',
       protocol: 'MCP',
     };
@@ -107,6 +109,7 @@ describe('CodeZipDevServer spawn config', () => {
       directory: '/project/app',
       hasConfig: true,
       isPython: true,
+      isJava: false,
       buildType: 'CodeZip',
       protocol: 'A2A',
     };
@@ -128,6 +131,7 @@ describe('CodeZipDevServer spawn config', () => {
       directory: '/project/app',
       hasConfig: true,
       isPython: true,
+      isJava: false,
       buildType: 'CodeZip',
       protocol: 'A2A',
     };
@@ -152,6 +156,7 @@ describe('CodeZipDevServer spawn config', () => {
       directory: '/project/app',
       hasConfig: true,
       isPython: false,
+      isJava: false,
       buildType: 'CodeZip',
       protocol: 'HTTP',
     };
@@ -177,6 +182,7 @@ describe('CodeZipDevServer spawn config', () => {
       directory: 'C:\\project\\app',
       hasConfig: true,
       isPython: false,
+      isJava: false,
       buildType: 'CodeZip',
       protocol: 'HTTP',
     };
@@ -205,6 +211,7 @@ describe('CodeZipDevServer spawn config', () => {
       directory: '/project/app',
       hasConfig: true,
       isPython: false,
+      isJava: false,
       buildType: 'CodeZip',
       protocol: 'HTTP',
     };
@@ -231,6 +238,7 @@ describe('CodeZipDevServer spawn config', () => {
       directory: '/project/app',
       hasConfig: true,
       isPython: false,
+      isJava: false,
       buildType: 'CodeZip',
       protocol: 'HTTP',
     };
@@ -253,6 +261,7 @@ describe('CodeZipDevServer spawn config', () => {
       directory: '/project/app',
       hasConfig: true,
       isPython: false,
+      isJava: false,
       buildType: 'CodeZip',
       protocol: 'HTTP',
     };
@@ -270,6 +279,7 @@ describe('CodeZipDevServer spawn config', () => {
       directory: '/project/app',
       hasConfig: true,
       isPython: true,
+      isJava: false,
       buildType: 'CodeZip',
       protocol: 'MCP',
     };

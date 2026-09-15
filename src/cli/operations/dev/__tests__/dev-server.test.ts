@@ -45,6 +45,7 @@ const config: DevConfig = {
   directory: '/test',
   hasConfig: true,
   isPython: true,
+  isJava: false,
   buildType: 'CodeZip',
   protocol: 'HTTP',
 };

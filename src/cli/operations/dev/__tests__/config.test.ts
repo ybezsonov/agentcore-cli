@@ -1,5 +1,8 @@
 import type { AgentCoreProjectSpec, DirectoryPath, FilePath } from '../../../../schema';
 import { getAgentPort, getDevConfig, getDevPort, getDevSupportedAgents, requiresExactDevPort } from '../config';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 // Helper to cast strings to branded path types for testing
@@ -903,5 +906,46 @@ describe('getDevSupportedAgents', () => {
 
     const supported = getDevSupportedAgents(project);
     expect(supported).toHaveLength(2);
+  });
+});
+
+describe('Java dev detection', () => {
+  it('detects Java from pom.xml despite the main.py placeholder', () => {
+    const root = mkdtempSync(join(tmpdir(), 'java-dev-config-'));
+    try {
+      const agentDir = join(root, 'app', 'JavaAgent');
+      mkdirSync(agentDir, { recursive: true });
+      writeFileSync(join(agentDir, 'pom.xml'), '<project/>');
+      const project = {
+        name: 'TestProject',
+        version: 1,
+        managedBy: 'CDK' as const,
+        runtimes: [
+          {
+            name: 'JavaAgent',
+            build: 'Container' as const,
+            entrypoint: filePath('main.py'),
+            codeLocation: dirPath('app/JavaAgent/'),
+            protocol: 'HTTP' as const,
+          },
+        ],
+        memories: [],
+        knowledgeBases: [],
+        credentials: [],
+        evaluators: [],
+        onlineEvalConfigs: [],
+        agentCoreGateways: [],
+        policyEngines: [],
+        configBundles: [],
+        abTests: [],
+        harnesses: [],
+        datasets: [],
+        payments: [],
+      } satisfies AgentCoreProjectSpec;
+
+      expect(getDevConfig(root, project, join(root, 'agentcore'))?.isJava).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

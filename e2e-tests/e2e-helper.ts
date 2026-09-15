@@ -30,7 +30,7 @@ interface E2EConfig {
   build?: string;
   memory?: string;
   /** Language for the agent project. Defaults to 'Python'. */
-  language?: 'Python' | 'TypeScript';
+  language?: 'Python' | 'TypeScript' | 'Java';
   /** Skip logs and traces tests. */
   skipObservability?: boolean;
   skipInvoke?: boolean;
@@ -58,7 +58,7 @@ interface E2EConfig {
 export function createE2ESuite(cfg: E2EConfig) {
   const hasRequiredEnvVars =
     (!cfg.apiKeyEnvVar || !!process.env[cfg.apiKeyEnvVar]) && (cfg.requiredEnvVars ?? []).every(v => !!process.env[v]);
-  const needsUv = cfg.language !== 'TypeScript';
+  const needsUv = cfg.language !== 'TypeScript' && cfg.language !== 'Java';
   const canRun = prereqs.npm && prereqs.git && hasAws && hasRequiredEnvVars && (!needsUv || prereqs.uv);
 
   describe.sequential(`e2e: ${cfg.framework}/${cfg.modelProvider} — create → deploy → invoke`, () => {

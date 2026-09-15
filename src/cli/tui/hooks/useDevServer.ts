@@ -209,7 +209,9 @@ export function useDevServer(options: {
             !serverReady &&
             (message.includes('Application startup complete') ||
               message.includes('Uvicorn running') ||
-              message.includes('Server listening'))
+              message.includes('Server listening') ||
+              (message.includes('Started ') && message.includes(' in ')) ||
+              message.includes('Tomcat started on port'))
           ) {
             serverReady = true;
             setStatus('running');

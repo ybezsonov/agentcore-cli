@@ -20,6 +20,7 @@ export {
   requiresContainerRuntime,
   checkDependencyVersions,
   checkCreateDependencies,
+  checkBinaryAvailable,
   type VersionCheckResult,
   type NpmCacheCheckResult,
   type DependencyCheckResult,

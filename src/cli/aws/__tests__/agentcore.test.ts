@@ -68,7 +68,7 @@ describe('parseSSELine', () => {
 
 describe('parseSSE', () => {
   it('combines multiple data lines into single string', () => {
-    const text = 'data: "Hello "\ndata: "World"';
+    const text = 'data:"Hello "\n\ndata:"World"\n\n';
     expect(parseSSE(text)).toBe('Hello World');
   });
 
@@ -77,12 +77,12 @@ describe('parseSSE', () => {
     expect(parseSSE(text)).toBe('content');
   });
 
-  it('returns empty string for no data lines', () => {
-    expect(parseSSE('event: ping\n')).toBe('');
+  it('returns raw text when no SSE event is parsed', () => {
+    expect(parseSSE('event: ping\n')).toBe('event: ping\n');
   });
 
   it('stops on error and returns error message', () => {
-    const text = 'data: "part1"\ndata: {"error": "fail"}\ndata: "part2"';
+    const text = 'data:"part1"\n\ndata:{"error":"fail"}\n\ndata:"part2"\n\n';
     expect(parseSSE(text)).toBe('Error: fail');
   });
 
@@ -92,7 +92,7 @@ describe('parseSSE', () => {
 
   it('handles raw non-JSON data lines', () => {
     const text = 'data: hello\ndata: world';
-    expect(parseSSE(text)).toBe('helloworld');
+    expect(parseSSE(text)).toBe('hello\nworld');
   });
 });
 
