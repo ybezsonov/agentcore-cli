@@ -37,7 +37,8 @@ These options are available on all commands:
   policy-engine, policy, payment-manager, payment-connector, capacity-provider, all)
 - `deploy` - Deploy infrastructure to AWS
 - `status` - Check deployment status
-- `dev` - Local development server (CodeZip: uvicorn with hot-reload; Container: Docker build + run with volume mount)
+- `dev` - Local development server (CodeZip: uvicorn with hot-reload; Container: Docker build + run with volume mount;
+  Java: Maven via `MvnDevServer`)
 - `invoke` - Invoke agents (local or deployed)
 - `capacity-provider delete-session` - Delete (deprovision) a live capacity provider session (data-plane)
 - `run eval` - Run on-demand evaluation against agent sessions
@@ -57,7 +58,8 @@ These options are available on all commands:
 
 ### Agent Types
 
-- **Template agents**: Created from framework templates (Strands, LangChain_LangGraph, GoogleADK, OpenAIAgents)
+- **Template agents**: Created from framework templates (Strands, LangChain_LangGraph, GoogleADK, OpenAIAgents,
+  VercelAI, SpringAI). SpringAI templates use Java.
 - **BYO agents**: Bring your own code with `agentcore add agent --type byo`
 - **Imported agents**: Import from Bedrock Agents with `agentcore add agent --type import`
 
@@ -65,7 +67,7 @@ These options are available on all commands:
 
 - **CodeZip**: Python source is packaged into a zip artifact and deployed to AgentCore Runtime (default)
 - **Container**: Agent is built as a Docker container image, deployed via ECR and CodeBuild. Requires a `Dockerfile` in
-  the agent's code directory. Supported container runtimes: Docker, Podman, Finch.
+  the agent's code directory. Supported container runtimes: Docker, Podman, Finch. Java agents are Container-only.
 
 ## Primitives Architecture
 
@@ -80,7 +82,7 @@ Each primitive extends `BasePrimitive` and implements: `add()`, `remove()`, `pre
 Current primitives:
 
 - `AgentPrimitive` — agent creation (template + BYO), removal, credential resolution. Template agents: Strands,
-  LangChain_LangGraph, GoogleADK, OpenAIAgents, VercelAI
+  LangChain_LangGraph, GoogleADK, OpenAIAgents, VercelAI, SpringAI (Java)
 - `MemoryPrimitive` — memory creation with strategies, removal
 - `CredentialPrimitive` — credential creation, .env management, removal
 - `EvaluatorPrimitive` — custom evaluator creation/removal with cross-reference validation

@@ -12,6 +12,10 @@ in `agentcore.json` flow through to deployed CloudFormation resources.
 1. `createRenderer()` selects a renderer based on framework/language
 2. `BaseRenderer.render()` copies and renders the framework base template
 3. If `hasMemory`, capability templates are layered on top
+
+Java capability templates carry their full `src/main/...` layout and render at the agent project root; existing
+Python/TypeScript memory templates retain their `memory/` package destination.
+
 4. If `buildType === 'Container'`, the container templates (`Dockerfile`, `.dockerignore`) from
    `assets/container/<language>/` are copied into the agent directory
 
