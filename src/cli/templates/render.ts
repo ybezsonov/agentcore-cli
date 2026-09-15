@@ -37,6 +37,20 @@ Handlebars.registerHelper('escapePyStr', (value: unknown) => {
   const s = typeof value === 'string' ? value : '';
   return new Handlebars.SafeString(s.replace(/\\/g, '\\\\').replace(/"""/g, '\\"\\"\\"'));
 });
+// Escapes a value for a Java .properties line. Two backslashes before '$' survive
+// java.util.Properties parsing and leave Spring's placeholder resolver a literal escape.
+Handlebars.registerHelper('escapeProps', (value: unknown) => {
+  const s = typeof value === 'string' ? value : '';
+  return new Handlebars.SafeString(
+    s
+      .replace(/\\/g, '\\\\')
+      .replace(/\$/g, '\\\\$')
+      .replace(/\r/g, '\\r')
+      .replace(/\n/g, '\\n')
+      .replace(/\t/g, '\\t')
+      .replace(/\f/g, '\\f')
+  );
+});
 Handlebars.registerHelper('some', (array: unknown[], key: string) => {
   if (!Array.isArray(array)) return false;
   return array.some(

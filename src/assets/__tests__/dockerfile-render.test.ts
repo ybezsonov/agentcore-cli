@@ -4,6 +4,7 @@ import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 
 const DOCKERFILE_PATH = path.resolve(__dirname, '..', 'container', 'python', 'Dockerfile');
+const JAVA_DOCKERFILE_PATH = path.resolve(__dirname, '..', 'container', 'java', 'Dockerfile');
 
 describe('Dockerfile enableOtel rendering', () => {
   const template = Handlebars.compile(fs.readFileSync(DOCKERFILE_PATH, 'utf-8'));
@@ -20,5 +21,19 @@ describe('Dockerfile enableOtel rendering', () => {
     expect(rendered).toMatchSnapshot('Dockerfile-enableOtel-false');
     expect(rendered).toContain('CMD ["python", "-m"');
     expect(rendered).not.toContain('opentelemetry-instrument');
+  });
+});
+
+
+describe('Java Dockerfile rendering', () => {
+  const template = Handlebars.compile(fs.readFileSync(JAVA_DOCKERFILE_PATH, 'utf-8'));
+
+  it('uses pinned Maven and Corretto stages without network-fetched tooling', () => {
+    const rendered = template({});
+    expect(rendered).toMatchSnapshot('Dockerfile-java');
+    expect(rendered).toContain('public.ecr.aws/docker/library/maven:3.9-amazoncorretto-21');
+    expect(rendered).not.toContain('curl');
+    expect(rendered).not.toContain('ADD https://');
+    expect(rendered).not.toContain('OTEL_');
   });
 });

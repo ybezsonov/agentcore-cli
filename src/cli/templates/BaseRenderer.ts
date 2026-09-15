@@ -61,14 +61,19 @@ export abstract class BaseRenderer {
     const baseDir = path.join(templateDir, 'base');
     await copyAndRenderDir(baseDir, projectDir, templateData);
 
-    // Render capability templates based on config
-    // Only render if the capability directory exists (not all SDKs have all capabilities)
+    // Java capability templates carry their full src/main/... layout and render at the project root.
+    // Existing Python/TypeScript memory templates retain their memory/ package destination.
+    if (this.config.hasMemory || this.config.hasGateway) {
+      await this.renderCapability(templateDir, projectDir, templateData, 'env-bridge');
+    }
     if (this.shouldRenderMemory()) {
-      const memoryCapabilityDir = path.join(templateDir, 'capabilities', 'memory');
-      if (existsSync(memoryCapabilityDir)) {
-        const memoryTargetDir = path.join(projectDir, 'memory');
-        await copyAndRenderDir(memoryCapabilityDir, memoryTargetDir, templateData);
-      }
+      await this.renderCapability(templateDir, projectDir, templateData, 'memory', 'memory');
+    }
+    if (this.config.hasGateway) {
+      await this.renderCapability(templateDir, projectDir, templateData, 'gateway');
+    }
+    if (this.config.hasSkillsFetcher) {
+      await this.renderCapability(templateDir, projectDir, templateData, 'skills');
     }
 
     if (this.shouldRenderPayment()) {
@@ -83,11 +88,12 @@ export abstract class BaseRenderer {
       }
     }
 
-    if (this.shouldRenderExecutionLimits()) {
-      const limitsCapabilityDir = path.join(templateDir, 'capabilities', 'execution-limits');
-      if (existsSync(limitsCapabilityDir)) {
-        await copyAndRenderDir(limitsCapabilityDir, projectDir, templateData);
-      }
+    const shouldRenderExecutionLimits =
+      this.config.targetLanguage === 'Java'
+        ? this.config.timeoutSeconds !== undefined
+        : this.shouldRenderExecutionLimits();
+    if (shouldRenderExecutionLimits) {
+      await this.renderCapability(templateDir, projectDir, templateData, 'execution-limits');
     }
 
     // Generate Dockerfile and .dockerignore for Container builds
@@ -105,5 +111,19 @@ export abstract class BaseRenderer {
         );
       }
     }
+  }
+
+  private async renderCapability(
+    templateDir: string,
+    projectDir: string,
+    templateData: TemplateData,
+    capability: string,
+    subdir?: string
+  ): Promise<void> {
+    const capabilityDir = path.join(templateDir, 'capabilities', capability);
+    if (!existsSync(capabilityDir)) return;
+
+    const targetDir = this.config.targetLanguage !== 'Java' && subdir ? path.join(projectDir, subdir) : projectDir;
+    await copyAndRenderDir(capabilityDir, targetDir, templateData);
   }
 }

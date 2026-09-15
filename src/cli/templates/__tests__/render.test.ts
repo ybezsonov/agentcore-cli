@@ -85,3 +85,36 @@ describe('copyAndRenderDir', () => {
     expect(readFileSync(join(destDir, '.npmignore'), 'utf-8')).toBe('dist/');
   });
 });
+
+describe('escapeProps', () => {
+  it('escapes Spring placeholders and properties control characters without HTML escaping', async () => {
+    const srcDir = mkdtempSync(join(tmpdir(), 'props-src-'));
+    const destDir = join(mkdtempSync(join(tmpdir(), 'props-dest-')), 'output');
+    try {
+      writeFileSync(join(srcDir, 'application.properties'), 'agent.system-prompt={{{escapeProps prompt}}}');
+      await copyAndRenderDir(srcDir, destDir, {
+        prompt: 'Price $5 ${name} \\ \r\n\t\f & < > " \'',
+      });
+
+      expect(readFileSync(join(destDir, 'application.properties'), 'utf-8')).toBe(
+        'agent.system-prompt=Price \\\\$5 \\\\${name} \\\\ \\r\\n\\t\\f & < > " \''
+      );
+    } finally {
+      rmSync(srcDir, { recursive: true, force: true });
+      rmSync(join(destDir, '..'), { recursive: true, force: true });
+    }
+  });
+
+  it('renders non-string values as empty', async () => {
+    const srcDir = mkdtempSync(join(tmpdir(), 'props-empty-src-'));
+    const destDir = join(mkdtempSync(join(tmpdir(), 'props-empty-dest-')), 'output');
+    try {
+      writeFileSync(join(srcDir, 'application.properties'), 'agent.system-prompt={{{escapeProps prompt}}}');
+      await copyAndRenderDir(srcDir, destDir, { prompt: 42 });
+      expect(readFileSync(join(destDir, 'application.properties'), 'utf-8')).toBe('agent.system-prompt=');
+    } finally {
+      rmSync(srcDir, { recursive: true, force: true });
+      rmSync(join(destDir, '..'), { recursive: true, force: true });
+    }
+  });
+});

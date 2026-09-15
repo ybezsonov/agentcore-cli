@@ -111,4 +111,57 @@ describe('BaseRenderer', () => {
 
     expect(mockCopyAndRenderDir).toHaveBeenCalledTimes(1);
   });
+
+  it('renders Java capabilities at the project root', async () => {
+    mockCopyAndRenderDir.mockResolvedValue(undefined);
+    for (const capability of ['env-bridge', 'memory', 'gateway', 'skills']) {
+      mkdirSync(join(tmpDir, 'java', 'http', 'spring', 'capabilities', capability), { recursive: true });
+    }
+
+    const renderer = new TestRenderer(
+      {
+        targetLanguage: 'Java',
+        name: 'Agent',
+        hasMemory: true,
+        hasGateway: true,
+        hasSkillsFetcher: true,
+      },
+      'spring',
+      tmpDir
+    );
+
+    await renderer.render({ outputDir: '/out' });
+
+    for (const capability of ['env-bridge', 'memory', 'gateway', 'skills']) {
+      expect(mockCopyAndRenderDir).toHaveBeenCalledWith(
+        join(tmpDir, 'java', 'http', 'spring', 'capabilities', capability),
+        '/out/app/Agent',
+        expect.objectContaining({ projectName: 'Agent' })
+      );
+    }
+  });
+
+  it('renders Java execution limits only for timeoutSeconds', async () => {
+    mockCopyAndRenderDir.mockResolvedValue(undefined);
+    const capabilityDir = join(tmpDir, 'java', 'http', 'spring', 'capabilities', 'execution-limits');
+    mkdirSync(capabilityDir, { recursive: true });
+
+    const budgetOnly = new TestRenderer(
+      { targetLanguage: 'Java', name: 'Agent', hasMemory: false, maxTokens: 100 },
+      'spring',
+      tmpDir
+    );
+    await budgetOnly.render({ outputDir: '/out' });
+    expect(mockCopyAndRenderDir).not.toHaveBeenCalledWith(capabilityDir, '/out/app/Agent', expect.anything());
+
+    vi.clearAllMocks();
+    mockCopyAndRenderDir.mockResolvedValue(undefined);
+    const timeout = new TestRenderer(
+      { targetLanguage: 'Java', name: 'Agent', hasMemory: false, timeoutSeconds: 60 },
+      'spring',
+      tmpDir
+    );
+    await timeout.render({ outputDir: '/out' });
+    expect(mockCopyAndRenderDir).toHaveBeenCalledWith(capabilityDir, '/out/app/Agent', expect.anything());
+  });
 });

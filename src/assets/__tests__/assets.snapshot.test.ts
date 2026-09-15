@@ -78,6 +78,15 @@ describe('Assets Directory Snapshots', () => {
     });
   });
 
+  describe.skipIf(assetFiles.filter(f => f.startsWith('java/')).length === 0)('Java assets', () => {
+    const javaFiles = assetFiles.filter(f => f.startsWith('java/'));
+
+    it.each(javaFiles)('java/%s should match snapshot', file => {
+      const content = readFileContent(path.join(ASSETS_DIR, file));
+      expect(content).toMatchSnapshot();
+    });
+  });
+
   describe('MCP assets', () => {
     const mcpFiles = assetFiles.filter(f => f.startsWith('mcp/'));
 
