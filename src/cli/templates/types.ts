@@ -172,6 +172,11 @@ export interface AgentRenderConfig {
    *  max_output_tokens / max_completion_tokens for Mantle models. */
   modelMaxTokens?: number;
 
+  /** Agent system prompt rendered into Java application.properties. */
+  systemPrompt?: string;
+  /** AgentCore Memory short-term retrieval window for Java harness exports. */
+  sessionTotalEventsLimit?: number;
+
   /** True when generating from a harness export (suppresses placeholder tools) */
   isExportHarness?: boolean;
   /** System prompt text written verbatim into main.py (export path) */
