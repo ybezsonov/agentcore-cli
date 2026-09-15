@@ -11,10 +11,11 @@ export const SDKFrameworkSchema = z.enum([
   'OpenAIAgents',
   'VercelAI',
   'BedrockManagedAgents',
+  'SpringAI',
 ]);
 export type SDKFramework = z.infer<typeof SDKFrameworkSchema>;
 
-export const TargetLanguageSchema = z.enum(['Python', 'TypeScript', 'Other']);
+export const TargetLanguageSchema = z.enum(['Python', 'TypeScript', 'Java', 'Other']);
 export type TargetLanguage = z.infer<typeof TargetLanguageSchema>;
 
 export const ModelProviderSchema = z.enum(['Bedrock', 'Gemini', 'OpenAI', 'Anthropic', 'LiteLLM']);
@@ -70,6 +71,7 @@ export const SDK_MODEL_PROVIDER_MATRIX: Record<SDKFramework, readonly ModelProvi
   VercelAI: ['Bedrock', 'Anthropic', 'OpenAI', 'Gemini'] as const,
   // BMA runs no model in the runtime: Bedrock Managed Agents (Mantle) runs Codex and calls in.
   BedrockManagedAgents: ['Bedrock'] as const,
+  SpringAI: ['Bedrock'] as const,
 };
 
 /**
@@ -185,9 +187,12 @@ export const RuntimeVersionSchema = z.union([PythonRuntimeSchema, NodeRuntimeSch
 export type RuntimeVersion = z.infer<typeof RuntimeVersionSchema>;
 
 /** Default entrypoint filename for each target language (create path). */
-export const DEFAULT_ENTRYPOINT_BY_LANGUAGE: Record<'Python' | 'TypeScript', string> = {
+export const DEFAULT_ENTRYPOINT_BY_LANGUAGE: Record<'Python' | 'TypeScript' | 'Java', string> = {
   Python: 'main.py',
   TypeScript: 'main.js',
+  // Java is Container-only, and the container CMD starts the jar. main.py is validation-only
+  // placeholder metadata for @aws/agentcore-cdk@0.1.0-alpha.53, which rejects .java entrypoints.
+  Java: 'main.py',
 };
 
 /** Default runtime version for each target language (create path). */
@@ -247,7 +252,15 @@ export type ProtocolMode = z.infer<typeof ProtocolModeSchema>;
  * MCP is a standalone tool server with no framework.
  */
 export const PROTOCOL_FRAMEWORK_MATRIX: Record<ProtocolMode, readonly SDKFramework[]> = {
-  HTTP: ['Strands', 'LangChain_LangGraph', 'GoogleADK', 'OpenAIAgents', 'VercelAI', 'BedrockManagedAgents'] as const,
+  HTTP: [
+    'Strands',
+    'LangChain_LangGraph',
+    'GoogleADK',
+    'OpenAIAgents',
+    'VercelAI',
+    'BedrockManagedAgents',
+    'SpringAI',
+  ] as const,
   MCP: [] as const,
   A2A: ['Strands', 'GoogleADK', 'LangChain_LangGraph'] as const,
   AGUI: ['Strands', 'LangChain_LangGraph', 'GoogleADK'] as const,
@@ -269,13 +282,14 @@ export function isFrameworkSupportedForProtocol(protocol: ProtocolMode, framewor
 
 /**
  * Matrix defining which SDK frameworks ship templates for each target language.
- * Vercel AI is TypeScript-only; the remaining frameworks are Python-only today.
+ * Vercel AI is TypeScript-only; Spring AI is Java-only; the remaining frameworks are Python-only today.
  * Used to keep framework pickers and validation in sync with the templates that
  * actually exist under `assets/<language>/...`.
  */
 export const LANGUAGE_FRAMEWORK_MATRIX = {
   Python: ['Strands', 'LangChain_LangGraph', 'GoogleADK', 'OpenAIAgents', 'BedrockManagedAgents'],
   TypeScript: ['Strands', 'VercelAI'],
+  Java: ['SpringAI'],
 } as const satisfies Record<string, readonly SDKFramework[]>;
 
 /** Languages that scaffold from templates (excludes 'Other', which is BYO-only). */
