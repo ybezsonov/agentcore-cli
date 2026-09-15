@@ -141,4 +141,23 @@ describe.skipIf(!prereqs.npm || !prereqs.git)('integration: Java / Spring AI age
     const json = await runFailure(['add', 'agent', '--name', 'JavaJwt', '--language', 'Java', '--json'], projectPath);
     expect(String(json.error)).toContain('Java agents support only AWS_IAM gateways');
   });
+
+  it('exports a harness whose only skill cannot be staged without the skills tool', async () => {
+    const project = `JavaSkills${Date.now().toString().slice(-6)}`;
+    const created = await runSuccess(['create', '--name', project, '--no-agent', '--skip-git', '--json'], testDir);
+    const projectPath = created.projectPath as string;
+    await runSuccess(['add', 'harness', '--name', 'Helper', '--json'], projectPath);
+    await runSuccess(['add', 'skill', '--harness', 'Helper', '--path', 'skills/missing', '--json'], projectPath);
+
+    await runSuccess(
+      ['export', 'harness', '--name', 'Helper', '--language', 'Java', '--framework', 'SpringAI', '--json'],
+      projectPath
+    );
+
+    // SkillsTool fails at boot with an empty catalog, so neither the bean nor its dependency is rendered.
+    const agentDir = join(projectPath, 'app', 'HelperAgent');
+    expect(await exists(join(agentDir, `${JAVA_SOURCES}/skills/SkillsConfig.java`))).toBe(false);
+    expect(await readFile(join(agentDir, 'pom.xml'), 'utf-8')).not.toContain('spring-ai-agent-utils');
+    expect(await readFile(join(agentDir, 'EXPORT_NOTES.md'), 'utf-8')).toContain('skills tool omitted');
+  });
 });

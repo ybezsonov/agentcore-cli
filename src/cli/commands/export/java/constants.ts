@@ -1,0 +1,13 @@
+export const GIT_SKILLS_CLONED_NOTE_CATEGORY = 'public git skills cloned into agent directory';
+export const GIT_SKILLS_CLONE_FAILED_NOTE_CATEGORY = 'public git skill could not be cloned at export';
+export const PATH_SKILLS_NOT_STAGED_NOTE_CATEGORY = 'path skill not found locally — not staged into the jar';
+export const INVALID_SKILLS_NOTE_CATEGORY = 'skill without a SKILL.md name — not staged into the jar';
+export const JAVA_NO_SKILLS_STAGED_NOTE_CATEGORY = 'no skills staged — skills tool omitted';
+export const JAVA_TRUNCATION_NOTE_CATEGORY = 'Java export: truncation';
+export const JAVA_EXECUTION_LIMITS_NOTE_CATEGORY = 'Java export: maxTokens / maxIterations omitted';
+export const JAVA_INLINE_TOOLS_NOTE_CATEGORY = 'Java export: inline function tools omitted';
+export const JAVA_BUILTIN_TOOLS_NOTE_CATEGORY = 'Java export: builtin shell / file_operations tools omitted';
+export const JAVA_SKILLS_NOTE_CATEGORY = 'Java export: s3 / private-git skills omitted';
+export const JAVA_ACTOR_ID_NOTE_CATEGORY = 'Java export: harness actorId not applied';
+export const JAVA_PAYLOAD_NOTE_CATEGORY = 'Java export: prompt-only invocation payload';
+export const JAVA_EXTERNAL_MEMORY_NOTE_CATEGORY = 'Java export: external memory strategies not checked';

@@ -1,4 +1,11 @@
-import type { AgentCoreProjectSpec, Credential, DeployedResourceState, HarnessSpec } from '../../../schema';
+import type {
+  AgentCoreProjectSpec,
+  Credential,
+  DeployedResourceState,
+  HarnessSpec,
+  SDKFramework,
+  TargetLanguage,
+} from '../../../schema';
 import type {
   AgentRenderConfig,
   GatewayProviderRenderConfig,
@@ -16,7 +23,17 @@ export interface ExportHarnessOptions {
   arn?: string;
   targetAgentName?: string;
   build?: string;
+  /** Target language for the exported agent. Defaults to Python. */
+  language?: string;
+  /** SDK framework for the exported agent. Defaults to Strands (Python) / SpringAI (Java). */
+  framework?: string;
   json?: boolean;
+}
+
+/** The validated target language and framework of an export. */
+export interface ExportLanguageConfig {
+  targetLanguage: TargetLanguage;
+  sdkFramework: SDKFramework;
 }
 
 // ============================================================================

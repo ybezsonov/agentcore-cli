@@ -58,7 +58,8 @@ import {
   MCP_HEADER_CREDS_NOTE_CATEGORY,
   PATH_SKILLS_NOTE_CATEGORY,
 } from './constants';
-import type { ExportNote, HarnessMappingResult, ResolvedHarnessContext } from './types';
+import { applyJavaRenderConfig, prepareJavaExportSpec } from './java/mapper';
+import type { ExportLanguageConfig, ExportNote, HarnessMappingResult, ResolvedHarnessContext } from './types';
 
 // ============================================================================
 // Public entry point
@@ -66,11 +67,15 @@ import type { ExportNote, HarnessMappingResult, ResolvedHarnessContext } from '.
 
 export function mapHarnessToExportConfig(
   context: ResolvedHarnessContext,
-  buildOverride?: BuildType
+  buildOverride?: BuildType,
+  langConfig?: ExportLanguageConfig
 ): HarnessMappingResult {
-  const { spec, targetAgentName } = context;
+  const { targetAgentName } = context;
+  const isJava = langConfig?.targetLanguage === 'Java';
+  // Java maps only the harness parts it supports. Java agents are Container-only.
+  const spec = isJava ? prepareJavaExportSpec(context.spec, buildOverride) : context.spec;
 
-  const buildType = resolveBuildType(spec, buildOverride);
+  const buildType = isJava ? 'Container' : resolveBuildType(spec, buildOverride);
 
   if (buildType === 'CodeZip' && (spec.containerUri || spec.dockerfile)) {
     const what = spec.containerUri ? `containerUri (${spec.containerUri})` : `dockerfile (${spec.dockerfile})`;
@@ -136,7 +141,7 @@ export function mapHarnessToExportConfig(
 
   // git skills + Container: warn that git must be in the image
   const gitSkills = spec.skills.filter(s => isGitSkill(s));
-  if (gitSkills.length > 0 && buildType === 'Container') {
+  if (gitSkills.length > 0 && buildType === 'Container' && !isJava) {
     context.exportNotes.push({
       category: GIT_SKILLS_CONTAINER_NOTE_CATEGORY,
       message:
@@ -292,6 +297,7 @@ export function mapHarnessToExportConfig(
     systemPromptText: context.systemPrompt,
     actorId: spec.memory?.mode === 'existing' ? spec.memory.actorId : undefined,
   };
+  if (isJava) applyJavaRenderConfig(renderConfig, langConfig, context, !!memoryResult.connections?.length);
 
   const connections = [
     ...(memoryResult.connections ?? []),
@@ -299,6 +305,8 @@ export function mapHarnessToExportConfig(
     ...toolResult.connections,
   ];
   const agentEnvSpec = buildAgentEnvSpec(context, targetAgentName, buildType, connections);
+  // The Java Dockerfile sets the JDK.
+  if (isJava) delete agentEnvSpec.runtimeVersion;
 
   // Private git skills reference an API-key credential provider for clone auth. Persist a name-only
   // credential entry per distinct provider so the deployed agent's role is granted GetResourceApiKey
@@ -563,7 +571,7 @@ function buildBedrockMantleRenderConfig(spec: HarnessSpec): Partial<AgentRenderC
 }
 
 /** A Bedrock model whose apiFormat routes it through the OpenAI-compatible Mantle endpoint. */
-function isBedrockMantleModel(spec: HarnessSpec): boolean {
+export function isBedrockMantleModel(spec: HarnessSpec): boolean {
   return (
     spec.model.provider === 'bedrock' &&
     (spec.model.apiFormat === 'responses' || spec.model.apiFormat === 'chat_completions')
@@ -981,7 +989,7 @@ export function isPathSkill(skill: HarnessSkill): skill is HarnessSkillPathSourc
   return 'path' in skill && !('gitUrl' in skill);
 }
 
-function isS3Skill(skill: HarnessSkill): skill is HarnessSkillS3Source {
+export function isS3Skill(skill: HarnessSkill): skill is HarnessSkillS3Source {
   return 's3Uri' in skill;
 }
 
@@ -1009,11 +1017,11 @@ function parseS3SkillArns(
   return { bucket, bucketArn, objectArn };
 }
 
-function isGitSkill(skill: HarnessSkill): skill is HarnessSkillGitSource {
+export function isGitSkill(skill: HarnessSkill): skill is HarnessSkillGitSource {
   return 'gitUrl' in skill;
 }
 
-function isAwsSkill(skill: HarnessSkill): skill is HarnessSkillAwsSkillsSource {
+export function isAwsSkill(skill: HarnessSkill): skill is HarnessSkillAwsSkillsSource {
   return 'awsSkills' in skill;
 }
 

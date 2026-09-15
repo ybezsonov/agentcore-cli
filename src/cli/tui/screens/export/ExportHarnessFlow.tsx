@@ -71,9 +71,10 @@ export function ExportHarnessFlow({ isInteractive = true, onExit, onBack, onDepl
   const handleComplete = useCallback(async (config: ExportHarnessConfig) => {
     const progressSteps: Step[] = [
       { label: 'Reading harness configuration', status: 'running' },
-      { label: 'Mapping to Strands template config', status: 'pending' },
+      { label: 'Mapping to template config', status: 'pending' },
       { label: 'Rendering agent code', status: 'pending' },
-      ...(config.build === 'Container'
+      // Java builds with Maven in its own Dockerfile, so the exporter writes no uv.lock for it.
+      ...(config.build === 'Container' && config.language !== 'Java'
         ? [{ label: 'Generating uv.lock for container build', status: 'pending' as const }]
         : []),
       { label: 'Updating agentcore.json', status: 'pending' },
@@ -98,7 +99,13 @@ export function ExportHarnessFlow({ isInteractive = true, onExit, onBack, onDepl
     try {
       const { handleExportHarness } = await import('../../../commands/export/harness-action');
       const result = await handleExportHarness(
-        { name: config.harness, targetAgentName: config.targetAgentName, build: config.build },
+        {
+          name: config.harness,
+          targetAgentName: config.targetAgentName,
+          build: config.build,
+          language: config.language,
+          framework: config.framework,
+        },
         { onProgress: advanceStep }
       );
 
@@ -123,7 +130,7 @@ export function ExportHarnessFlow({ isInteractive = true, onExit, onBack, onDepl
 
   if (flow.name === 'loading') {
     return (
-      <Screen title="Export Harness to Python Strands Agent" onExit={onBack}>
+      <Screen title="Export Harness to Runtime Agent" onExit={onBack}>
         <GradientText text="Loading harnesses..." />
       </Screen>
     );
@@ -155,7 +162,7 @@ export function ExportHarnessFlow({ isInteractive = true, onExit, onBack, onDepl
   if (flow.name === 'exporting') {
     return (
       <Screen
-        title="Export Harness to Python Strands Agent"
+        title="Export Harness to Runtime Agent"
         onExit={() => {
           /* noop while exporting */
         }}
@@ -175,7 +182,7 @@ export function ExportHarnessFlow({ isInteractive = true, onExit, onBack, onDepl
     };
 
     return (
-      <Screen title="Export Harness to Python Strands Agent" onExit={onExit}>
+      <Screen title="Export Harness to Runtime Agent" onExit={onExit}>
         <Box flexDirection="column" gap={1}>
           <Box flexDirection="column">
             <Text color="green">✓ Exported harness → runtime agent {flow.agentName}</Text>

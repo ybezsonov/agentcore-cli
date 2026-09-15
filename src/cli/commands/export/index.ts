@@ -17,7 +17,9 @@ export function registerExport(program: Command): void {
 
   exportCmd
     .command('harness')
-    .description('Export a harness to a Python Strands runtime agent (in-project via --name, or by --arn)')
+    .description(
+      'Export a harness to a runtime agent — Python/Strands (default) or Java/SpringAI (in-project via --name, or by --arn)'
+    )
     .option('--name <name>', 'In-project harness name [non-interactive]')
     .option('--arn <arn>', 'ARN of a harness created outside this project — fetched from the service [non-interactive]')
     .option(
@@ -25,6 +27,8 @@ export function registerExport(program: Command): void {
       'Name for the generated runtime agent (default: <harnessName>Agent) [non-interactive]'
     )
     .option('--build <type>', 'Build type: CodeZip or Container [non-interactive]')
+    .option('--language <language>', 'Target language: Python (default) or Java [non-interactive]')
+    .option('--framework <framework>', 'SDK framework: Strands (Python) or SpringAI (Java) [non-interactive]')
     .option('--json', 'Output results as JSON')
     .action(async options => {
       if (!findConfigRoot()) {
@@ -79,8 +83,10 @@ export function registerExport(program: Command): void {
       console.log('');
       console.log(`${green}Exported harness ${harnessLabel} → runtime agent ${targetAgentName}${reset}`);
       console.log('');
+      const isJava = (options.language ?? '').toLowerCase() === 'java';
+      const agentLabel = isJava ? 'Java agent (Spring AI)' : 'Python agent (Strands)';
       console.log(`${dim}Generated:${reset}`);
-      console.log(`  app/${targetAgentName}/    Python agent (Strands)`);
+      console.log(`  app/${targetAgentName}/    ${agentLabel}`);
       console.log(`  agentcore/agentcore.json  updated`);
       console.log('');
 

@@ -12,16 +12,18 @@ import {
   ModelProvider as TelemetryModelProvider,
   standardize,
 } from '../../telemetry/schemas/common-shapes.js';
-import { StrandsRenderer } from '../../templates/StrandsRenderer';
+import { createRenderer } from '../../templates';
 import {
   CUSTOM_DOCKERFILE_NOTE_CATEGORY,
   EXPORT_NOTES_FILENAME,
   PATH_SKILLS_COPIED_NOTE_CATEGORY,
   PATH_SKILLS_VERIFY_BASE_IMAGE_NOTE_CATEGORY,
 } from './constants';
+import { resolveExportLanguageConfig } from './export-language';
 import { fetchHarnessSpecByArn } from './fetch-harness-spec';
 import { isPathSkill, mapHarnessToExportConfig } from './harness-mapper';
 import { resolveHarnessContext } from './harness-resolver';
+import { stageJavaSkills } from './java/skills';
 import type { ExportHarnessOptions, ExportNote, ResolvedHarnessContext } from './types';
 import { execSync } from 'node:child_process';
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -59,6 +61,11 @@ export async function handleExportHarness(
           error: new ValidationError(`Invalid --build value "${buildOverride}". Expected CodeZip or Container.`),
         };
       }
+
+      const langResult = resolveExportLanguageConfig(options);
+      if (!langResult.success) return { success: false as const, error: langResult.error };
+      const langConfig = langResult.config;
+      const isJava = langConfig.targetLanguage === 'Java';
 
       // For --arn, fetch the harness from the service first so we can derive its name. The fetch
       // needs a region — taken from the project's first deployment target.
@@ -104,9 +111,9 @@ export async function handleExportHarness(
       }
 
       // 2. Map harness spec to render config + agent env spec
-      log('Mapping to Strands template config');
+      log(`Mapping to ${langConfig.sdkFramework} template config`);
       const { renderConfig, agentEnvSpec, credentialEntry, mcpCredentialEntries, gitCredentialEntries } =
-        mapHarnessToExportConfig(context, buildOverride);
+        mapHarnessToExportConfig(context, buildOverride, langConfig);
 
       // The target directory is guaranteed not to pre-exist (resolveHarnessContext throws if it
       // does), so anything written below is created by this export. Remove it on failure to avoid
@@ -153,7 +160,10 @@ export async function handleExportHarness(
       //     unresolvable paths (absolute, traversal, or not found) are assumed to live in the base
       //     image and get a verify-note instead. (Container only — CodeZip path skills are unsupported
       //     and already noted by the mapper.)
-      if (!context.spec.dockerfile && renderConfig.buildType === 'Container') {
+      if (isJava) {
+        // Java packages its skills into the jar instead.
+        stageJavaSkills(context, renderConfig, agentDir);
+      } else if (!context.spec.dockerfile && renderConfig.buildType === 'Container') {
         const harnessDir = join(context.projectRoot, 'app', harnessName);
         const copied: string[] = [];
         const unresolved: string[] = [];
@@ -187,10 +197,10 @@ export async function handleExportHarness(
         writeDockerfileStub(agentDir, context.spec.containerUri);
       }
 
-      // 5. Render Strands agent code
+      // 5. Render agent code
       log('Rendering agent code');
       try {
-        const renderer = new StrandsRenderer(renderConfig);
+        const renderer = createRenderer(renderConfig);
         await renderer.render({ outputDir: context.projectRoot });
       } catch (err) {
         cleanupAgentDir();
@@ -205,8 +215,9 @@ export async function handleExportHarness(
         };
       }
 
-      // 5b. Generate uv.lock for Container builds (required by the Dockerfile's uv sync step)
-      if (renderConfig.buildType === 'Container') {
+      // 5b. Generate uv.lock for Container builds (required by the Dockerfile's uv sync step).
+      //     The Java Dockerfile builds with Maven.
+      if (renderConfig.buildType === 'Container' && !isJava) {
         log('Generating uv.lock for container build');
         try {
           execSync('uv lock', { cwd: agentDir, stdio: 'pipe' });
@@ -257,7 +268,7 @@ export async function handleExportHarness(
 
       // 7. Write EXPORT_NOTES.md
       log('Writing EXPORT_NOTES.md');
-      writeExportNotes(context.exportNotes, harnessName, targetAgentName, agentDir);
+      writeExportNotes(context.exportNotes, harnessName, targetAgentName, agentDir, isJava);
 
       // Record telemetry attrs after all work is done
       recorder.set({
@@ -444,14 +455,20 @@ function readStrandsVersion(agentDir: string): string {
   }
 }
 
-function writeExportNotes(notes: ExportNote[], harnessName: string, agentName: string, agentDir: string): void {
+function writeExportNotes(
+  notes: ExportNote[],
+  harnessName: string,
+  agentName: string,
+  agentDir: string,
+  isJava: boolean
+): void {
   const today = new Date().toISOString().split('T')[0];
-  const strandsVersion = readStrandsVersion(agentDir);
   const lines: string[] = [
     `# Export Notes — ${harnessName} → ${agentName}`,
     '',
     `Exported on: ${today}`,
-    `Strands version: ${strandsVersion}`,
+    // Java pins its Spring AI and AgentCore versions in pom.xml.
+    isJava ? 'Framework: SpringAI (Java, container-only)' : `Strands version: ${readStrandsVersion(agentDir)}`,
     `Source harness: agentcore/app/${harnessName}/harness.json`,
     `Generated agent: app/${agentName}/`,
     '',
