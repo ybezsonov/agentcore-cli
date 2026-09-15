@@ -1,4 +1,5 @@
 import {
+  DEFAULT_ENTRYPOINT_BY_LANGUAGE,
   LANGUAGE_FRAMEWORK_MATRIX,
   ModelProviderSchema,
   NetworkModeSchema,
@@ -30,6 +31,8 @@ describe('matchEnumValue', () => {
     expect(matchEnumValue(SDKFrameworkSchema, 'Strands')).toBe('Strands');
     expect(matchEnumValue(ModelProviderSchema, 'bedrock')).toBe('Bedrock');
     expect(matchEnumValue(TargetLanguageSchema, 'python')).toBe('Python');
+    expect(matchEnumValue(TargetLanguageSchema, 'java')).toBe('Java');
+    expect(matchEnumValue(SDKFrameworkSchema, 'springai')).toBe('SpringAI');
   });
 
   it('returns undefined for non-matching input', () => {
@@ -48,8 +51,16 @@ describe('SDKFrameworkSchema', () => {
   it('accepts valid frameworks and rejects invalid', () => {
     expect(SDKFrameworkSchema.safeParse('Strands').success).toBe(true);
     expect(SDKFrameworkSchema.safeParse('OpenAIAgents').success).toBe(true);
+    expect(SDKFrameworkSchema.safeParse('SpringAI').success).toBe(true);
     expect(SDKFrameworkSchema.safeParse('AutoGen').success).toBe(false);
     expect(SDKFrameworkSchema.safeParse('strands').success).toBe(false); // case-sensitive
+  });
+});
+
+describe('TargetLanguageSchema', () => {
+  it('accepts Java with canonical casing', () => {
+    expect(TargetLanguageSchema.safeParse('Java').success).toBe(true);
+    expect(TargetLanguageSchema.safeParse('java').success).toBe(false);
   });
 });
 
@@ -76,7 +87,14 @@ describe('RuntimeVersionSchemas', () => {
     expect(PythonRuntimeSchema.safeParse('PYTHON_3_15').success).toBe(false);
     expect(NodeRuntimeSchema.safeParse('NODE_16').success).toBe(false);
     expect(NodeRuntimeSchema.safeParse('NODE_24').success).toBe(false);
+    expect(RuntimeVersionSchema.safeParse('JAVA_21').success).toBe(false);
     expect(RuntimeVersionSchema.safeParse('RUBY_3_0').success).toBe(false);
+  });
+});
+
+describe('DEFAULT_ENTRYPOINT_BY_LANGUAGE', () => {
+  it('uses the CDK-compatible placeholder for Java containers', () => {
+    expect(DEFAULT_ENTRYPOINT_BY_LANGUAGE.Java).toBe('main.py');
   });
 });
 
@@ -100,6 +118,10 @@ describe('getSupportedModelProviders', () => {
   it('returns only OpenAI for OpenAIAgents', () => {
     expect(getSupportedModelProviders('OpenAIAgents')).toEqual(['OpenAI']);
   });
+
+  it('returns only Bedrock for SpringAI', () => {
+    expect(getSupportedModelProviders('SpringAI')).toEqual(['Bedrock']);
+  });
 });
 
 describe('isModelProviderSupported', () => {
@@ -107,11 +129,13 @@ describe('isModelProviderSupported', () => {
     expect(isModelProviderSupported('Strands', 'Bedrock')).toBe(true);
     expect(isModelProviderSupported('GoogleADK', 'Gemini')).toBe(true);
     expect(isModelProviderSupported('OpenAIAgents', 'OpenAI')).toBe(true);
+    expect(isModelProviderSupported('SpringAI', 'Bedrock')).toBe(true);
   });
 
   it('returns false for unsupported combinations', () => {
     expect(isModelProviderSupported('GoogleADK', 'Bedrock')).toBe(false);
     expect(isModelProviderSupported('OpenAIAgents', 'Anthropic')).toBe(false);
+    expect(isModelProviderSupported('SpringAI', 'OpenAI')).toBe(false);
   });
 });
 
@@ -148,7 +172,7 @@ describe('PROTOCOL_FRAMEWORK_MATRIX', () => {
 
   it('HTTP supports all visible frameworks', () => {
     expect(PROTOCOL_FRAMEWORK_MATRIX.HTTP).toEqual(
-      expect.arrayContaining(['Strands', 'LangChain_LangGraph', 'GoogleADK', 'OpenAIAgents'])
+      expect.arrayContaining(['Strands', 'LangChain_LangGraph', 'GoogleADK', 'OpenAIAgents', 'SpringAI'])
     );
   });
 
@@ -160,6 +184,7 @@ describe('PROTOCOL_FRAMEWORK_MATRIX', () => {
     expect(PROTOCOL_FRAMEWORK_MATRIX.A2A).toContain('Strands');
     expect(PROTOCOL_FRAMEWORK_MATRIX.A2A).toContain('GoogleADK');
     expect(PROTOCOL_FRAMEWORK_MATRIX.A2A).not.toContain('OpenAIAgents');
+    expect(PROTOCOL_FRAMEWORK_MATRIX.A2A).not.toContain('SpringAI');
   });
 });
 
@@ -167,6 +192,7 @@ describe('getSupportedFrameworksForProtocol', () => {
   it('returns all frameworks for HTTP', () => {
     const frameworks = getSupportedFrameworksForProtocol('HTTP');
     expect(frameworks).toContain('Strands');
+    expect(frameworks).toContain('SpringAI');
     expect(frameworks.length).toBeGreaterThan(0);
   });
 
@@ -182,8 +208,8 @@ describe('getSupportedFrameworksForProtocol', () => {
 });
 
 describe('LANGUAGE_FRAMEWORK_MATRIX', () => {
-  it('defines Python and TypeScript', () => {
-    expect(Object.keys(LANGUAGE_FRAMEWORK_MATRIX)).toEqual(expect.arrayContaining(['Python', 'TypeScript']));
+  it('defines Python, TypeScript, and Java', () => {
+    expect(Object.keys(LANGUAGE_FRAMEWORK_MATRIX)).toEqual(expect.arrayContaining(['Python', 'TypeScript', 'Java']));
   });
 
   it('Python supports the open-source frameworks but not Vercel AI (TypeScript-only)', () => {
@@ -195,6 +221,10 @@ describe('LANGUAGE_FRAMEWORK_MATRIX', () => {
 
   it('TypeScript supports only Strands and Vercel AI', () => {
     expect([...LANGUAGE_FRAMEWORK_MATRIX.TypeScript].sort()).toEqual(['Strands', 'VercelAI']);
+  });
+
+  it('Java supports only SpringAI', () => {
+    expect(LANGUAGE_FRAMEWORK_MATRIX.Java).toEqual(['SpringAI']);
   });
 });
 
@@ -210,6 +240,10 @@ describe('getFrameworksForLanguage', () => {
     expect(frameworks).toContain('Strands');
     expect(frameworks).toContain('VercelAI');
   });
+
+  it('returns only SpringAI for Java', () => {
+    expect(getFrameworksForLanguage('Java')).toEqual(['SpringAI']);
+  });
 });
 
 describe('isFrameworkSupportedForLanguage', () => {
@@ -217,6 +251,7 @@ describe('isFrameworkSupportedForLanguage', () => {
     expect(isFrameworkSupportedForLanguage('Python', 'Strands')).toBe(true);
     expect(isFrameworkSupportedForLanguage('TypeScript', 'VercelAI')).toBe(true);
     expect(isFrameworkSupportedForLanguage('TypeScript', 'Strands')).toBe(true);
+    expect(isFrameworkSupportedForLanguage('Java', 'SpringAI')).toBe(true);
   });
 
   it('returns false for Python + Vercel AI (the bug being fixed)', () => {
@@ -227,11 +262,17 @@ describe('isFrameworkSupportedForLanguage', () => {
     expect(isFrameworkSupportedForLanguage('TypeScript', 'LangChain_LangGraph')).toBe(false);
     expect(isFrameworkSupportedForLanguage('TypeScript', 'GoogleADK')).toBe(false);
   });
+
+  it('returns false for unsupported Java combinations', () => {
+    expect(isFrameworkSupportedForLanguage('Java', 'Strands')).toBe(false);
+    expect(isFrameworkSupportedForLanguage('Python', 'SpringAI')).toBe(false);
+  });
 });
 
 describe('isFrameworkSupportedForProtocol', () => {
   it('returns true for Strands + HTTP', () => {
     expect(isFrameworkSupportedForProtocol('HTTP', 'Strands')).toBe(true);
+    expect(isFrameworkSupportedForProtocol('HTTP', 'SpringAI')).toBe(true);
   });
 
   it('returns true for Strands + A2A', () => {
@@ -240,6 +281,7 @@ describe('isFrameworkSupportedForProtocol', () => {
 
   it('returns false for OpenAIAgents + A2A', () => {
     expect(isFrameworkSupportedForProtocol('A2A', 'OpenAIAgents')).toBe(false);
+    expect(isFrameworkSupportedForProtocol('A2A', 'SpringAI')).toBe(false);
   });
 
   it('returns false for any framework + MCP', () => {

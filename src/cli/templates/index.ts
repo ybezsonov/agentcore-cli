@@ -3,6 +3,7 @@ import { GoogleADKRenderer } from './GoogleADKRenderer';
 import { LangGraphRenderer } from './LangGraphRenderer';
 import { McpRenderer } from './McpRenderer';
 import { OpenAIAgentsRenderer } from './OpenAIAgentsRenderer';
+import { SpringRenderer } from './SpringRenderer';
 import { StrandsRenderer } from './StrandsRenderer';
 import { VercelAIRenderer } from './VercelAIRenderer';
 import type { AgentRenderConfig } from './types';
@@ -14,6 +15,7 @@ export { GoogleADKRenderer } from './GoogleADKRenderer';
 export { LangGraphRenderer } from './LangGraphRenderer';
 export { McpRenderer } from './McpRenderer';
 export { OpenAIAgentsRenderer } from './OpenAIAgentsRenderer';
+export { SpringRenderer } from './SpringRenderer';
 export { StrandsRenderer } from './StrandsRenderer';
 export { VercelAIRenderer } from './VercelAIRenderer';
 export type { AgentRenderConfig } from './types';
@@ -38,6 +40,8 @@ export function createRenderer(config: AgentRenderConfig): BaseRenderer {
       return new OpenAIAgentsRenderer(config);
     case 'VercelAI':
       return new VercelAIRenderer(config);
+    case 'SpringAI':
+      return new SpringRenderer(config);
     default: {
       const _exhaustive: never = config.sdkFramework;
       throw new Error(`Unsupported SDK framework: ${String(_exhaustive)}`);
