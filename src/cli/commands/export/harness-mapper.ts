@@ -3,6 +3,7 @@ import { ValidationError } from '../../../lib/errors/types';
 import {
   BROWSER_ARN_PATTERN,
   CODE_INTERPRETER_ARN_PATTERN,
+  DEFAULT_ENTRYPOINT_BY_LANGUAGE,
   connectionEnvToken,
   connectionIdForTarget,
   resourceIdFromArn,
@@ -52,13 +53,23 @@ import {
   CONTAINER_URI_NOTE_CATEGORY,
   GATEWAY_GRANT_TYPE_NOTE_CATEGORY,
   GIT_SKILLS_CONTAINER_NOTE_CATEGORY,
+  JAVA_ACTOR_ID_NOTE_CATEGORY,
+  JAVA_BUILTIN_TOOLS_NOTE_CATEGORY,
+  JAVA_EXECUTION_LIMITS_NOTE_CATEGORY,
+  JAVA_INLINE_TOOLS_NOTE_CATEGORY,
+  JAVA_PAYLOAD_NOTE_CATEGORY,
+  JAVA_SKILLS_NOTE_CATEGORY,
+  JAVA_TRUNCATION_NOTE_CATEGORY,
   LITELLM_NO_API_KEY_NOTE_CATEGORY,
   MALFORMED_S3_SKILL_NOTE_CATEGORY,
   MALFORMED_TOOL_ARN_NOTE_CATEGORY,
   MCP_HEADER_CREDS_NOTE_CATEGORY,
   PATH_SKILLS_NOTE_CATEGORY,
 } from './constants';
-import type { ExportNote, HarnessMappingResult, ResolvedHarnessContext } from './types';
+import type { ExportLanguageConfig, ExportNote, HarnessMappingResult, ResolvedHarnessContext } from './types';
+
+/** Default export target: Python/Strands — preserves the pre-Java behaviour when no language is given. */
+const DEFAULT_EXPORT_LANGUAGE: ExportLanguageConfig = { targetLanguage: 'Python', sdkFramework: 'Strands' };
 
 // ============================================================================
 // Public entry point
@@ -66,11 +77,16 @@ import type { ExportNote, HarnessMappingResult, ResolvedHarnessContext } from '.
 
 export function mapHarnessToExportConfig(
   context: ResolvedHarnessContext,
-  buildOverride?: BuildType
+  buildOverride?: BuildType,
+  langConfig: ExportLanguageConfig = DEFAULT_EXPORT_LANGUAGE
 ): HarnessMappingResult {
   const { spec, targetAgentName } = context;
+  const isJava = langConfig.targetLanguage === 'Java';
 
-  const buildType = resolveBuildType(spec, buildOverride);
+  // Java agents are Container-only, matching the create path; unsupported combinations are rejected
+  // before any config is built.
+  if (isJava) assertJavaExportSupported(spec, buildOverride);
+  const buildType: BuildType = isJava ? 'Container' : resolveBuildType(spec, buildOverride);
 
   if (buildType === 'CodeZip' && (spec.containerUri || spec.dockerfile)) {
     const what = spec.containerUri ? `containerUri (${spec.containerUri})` : `dockerfile (${spec.dockerfile})`;
@@ -134,9 +150,11 @@ export function mapHarnessToExportConfig(
     });
   }
 
-  // git skills + Container: warn that git must be in the image
+  // git skills + Container: warn that git must be in the image (Python/TS clone at runtime). Java does
+  // NOT need git in the image — the CLI shallow-clones PUBLIC git skills at export and stages them into
+  // the jar (see harness-action); private git skills are deferred and flagged by the Java coverage note.
   const gitSkills = spec.skills.filter(s => isGitSkill(s));
-  if (gitSkills.length > 0 && buildType === 'Container') {
+  if (gitSkills.length > 0 && buildType === 'Container' && !isJava) {
     context.exportNotes.push({
       category: GIT_SKILLS_CONTAINER_NOTE_CATEGORY,
       message:
@@ -235,11 +253,24 @@ export function mapHarnessToExportConfig(
   }
 
   const mcpResolution = resolveRemoteMcpTools(spec, allowedToolPatterns, context);
+  if (isJava && mcpResolution.tools.some(tool => (tool.headerCredentials?.length ?? 0) > 0)) {
+    throw new ValidationError(
+      'Authenticated remote MCP headers are not yet supported for Java agents. Remove the headers or export the harness as Python.'
+    );
+  }
+  if (isJava) {
+    const unsupportedGateway = gatewayResult.providers.find(gateway => gateway.authType !== 'AWS_IAM');
+    if (unsupportedGateway) {
+      throw new ValidationError(
+        `Gateway "${unsupportedGateway.name}" uses ${unsupportedGateway.authType}; Java agents support only AWS_IAM gateways.`
+      );
+    }
+  }
 
   const renderConfig: AgentRenderConfig = {
     name: targetAgentName,
-    sdkFramework: 'Strands',
-    targetLanguage: 'Python',
+    sdkFramework: langConfig.sdkFramework,
+    targetLanguage: langConfig.targetLanguage,
     modelProvider,
     hasMemory: memoryResult.providers.length > 0,
     hasIdentity: identityResult.provider !== null,
@@ -252,7 +283,7 @@ export function mapHarnessToExportConfig(
     gatewayAuthTypes: [...new Set(gatewayResult.providers.map(g => g.authType))],
     protocol: 'HTTP',
     dockerfile: resolveDockerfileName(spec, buildType),
-    enableOtel: true,
+    enableOtel: !isJava,
     hasConfigBundle: false,
     hasPayment: false,
     // Execution limits — consumed by execution-limits capability template
@@ -262,6 +293,8 @@ export function mapHarnessToExportConfig(
     // Truncation — consumed by main.py template
     truncationStrategy: spec.truncation?.strategy,
     truncationConfig: resolveTruncationConfig(spec.truncation),
+    // Java: the truncation limit becomes the AgentCore Memory retrieval window, so it needs memory.
+    ...buildSessionTruncationRenderConfig(spec, isJava, memoryResult.providers.length > 0),
     // Remote MCP tools — consumed by mcp_client template
     remoteMcpTools: mcpResolution.tools,
     // Filesystem mounts (session storage, EFS, S3) — consumed by main.py/CDK templates
@@ -290,15 +323,18 @@ export function mapHarnessToExportConfig(
     ...buildBedrockMantleRenderConfig(spec),
     // System prompt (written verbatim into main.py)
     systemPromptText: context.systemPrompt,
+    ...(isJava && { systemPrompt: context.systemPrompt }),
     actorId: spec.memory?.mode === 'existing' ? spec.memory.actorId : undefined,
   };
+
+  if (isJava) pushJavaCoverageNotes(renderConfig, context);
 
   const connections = [
     ...(memoryResult.connections ?? []),
     ...(gatewayResult.connections ?? []),
     ...toolResult.connections,
   ];
-  const agentEnvSpec = buildAgentEnvSpec(context, targetAgentName, buildType, connections);
+  const agentEnvSpec = buildAgentEnvSpec(context, targetAgentName, buildType, connections, isJava);
 
   // Private git skills reference an API-key credential provider for clone auth. Persist a name-only
   // credential entry per distinct provider so the deployed agent's role is granted GetResourceApiKey
@@ -405,7 +441,8 @@ function buildAgentEnvSpec(
   context: ResolvedHarnessContext,
   targetAgentName: string,
   buildType: BuildType,
-  connections: Connection[] = []
+  connections: Connection[] = [],
+  isJava = false
 ): AgentEnvSpec {
   const { spec } = context;
   const codeLocation = `${APP_DIR}/${targetAgentName}/` as DirectoryPath;
@@ -416,9 +453,13 @@ function buildAgentEnvSpec(
     name: targetAgentName,
     build: buildType,
     ...(resolveDockerfileName(spec, buildType) && { dockerfile: resolveDockerfileName(spec, buildType)! as FilePath }),
-    entrypoint: DEFAULT_PYTHON_ENTRYPOINT as FilePath,
+    // Java: emit the same entrypoint as the create path (the AgentApplication.java path) and OMIT
+    // runtimeVersion — Java is container-only, the Dockerfile controls the JDK, and a JAVA_* runtime
+    // version is rejected. (The `.java` entrypoint is still rejected at CDK synth today → the deploy
+    // workaround is to swap it to a main.py placeholder; RFC Q7, shared with the create path.)
+    entrypoint: (isJava ? DEFAULT_ENTRYPOINT_BY_LANGUAGE.Java : DEFAULT_PYTHON_ENTRYPOINT) as FilePath,
     codeLocation,
-    runtimeVersion: DEFAULT_PYTHON_VERSION,
+    ...(isJava ? {} : { runtimeVersion: DEFAULT_PYTHON_VERSION }),
     networkMode: spec.networkMode ?? 'PUBLIC',
     protocol: 'HTTP',
     ...(spec.networkMode === 'VPC' && spec.networkConfig && { networkConfig: spec.networkConfig }),
@@ -936,6 +977,102 @@ function resolveRemoteMcpTools(
 // Helpers
 // ============================================================================
 
+/**
+ * Reject the harness / language combinations the Java export does not support before any file is
+ * written. Messages match the create/add gate (validate-language-matrix) and docs/frameworks.md.
+ */
+function assertJavaExportSupported(spec: HarnessSpec, buildOverride?: BuildType): void {
+  if (buildOverride === 'CodeZip') {
+    throw new ValidationError(
+      '--build CodeZip is not supported for Java agents. Use --build Container or omit --build.'
+    );
+  }
+  if (spec.containerUri || spec.dockerfile) {
+    throw new ValidationError(
+      'Java export does not support a custom containerUri or dockerfile; the generated agent ships its own ' +
+        'Dockerfile. Remove them or export the harness as Python.'
+    );
+  }
+  if (spec.model.provider !== 'bedrock' || isBedrockMantleModel(spec)) {
+    const provider =
+      spec.model.provider === 'open_ai'
+        ? 'OpenAI'
+        : spec.model.provider === 'gemini'
+          ? 'Gemini'
+          : spec.model.provider === 'lite_llm'
+            ? 'LiteLLM'
+            : 'Bedrock Mantle';
+    throw new ValidationError(
+      `${provider} model provider is not yet supported for Java agents. Use --model-provider Bedrock.`
+    );
+  }
+}
+
+/**
+ * Surface every harness feature the generated Java agent does not carry as its own export note, so
+ * nothing is dropped silently. One note per feature; wording matches docs/frameworks.md.
+ */
+function pushJavaCoverageNotes(renderConfig: AgentRenderConfig, context: ResolvedHarnessContext): void {
+  const note = (category: string, message: string) => context.exportNotes.push({ category, message });
+
+  const truncation = renderConfig.truncationStrategy;
+  if (truncation && truncation !== 'none') {
+    if (!renderConfig.hasMemory) {
+      note(
+        JAVA_TRUNCATION_NOTE_CATEGORY,
+        'Java truncation requires AgentCore Memory. Add memory or remove truncation; the generated Java agent ' +
+          'does not include truncation.'
+      );
+    } else if (truncation === 'summarization') {
+      note(
+        JAVA_TRUNCATION_NOTE_CATEGORY,
+        'Java/SpringAI maps the truncation limit to the AgentCore Memory retrieval window; an in-process ' +
+          'summarization component is not yet supported.'
+      );
+    }
+  }
+  if (renderConfig.maxTokens !== undefined || renderConfig.maxIterations !== undefined) {
+    note(
+      JAVA_EXECUTION_LIMITS_NOTE_CATEGORY,
+      'Java/SpringAI export does not yet enforce maxTokens or maxIterations; these values were omitted. ' +
+        'timeoutSeconds is supported.'
+    );
+  }
+  const inlineToolCount = renderConfig.inlineFunctionTools?.length ?? 0;
+  if (inlineToolCount > 0) {
+    note(
+      JAVA_INLINE_TOOLS_NOTE_CATEGORY,
+      `Java/SpringAI export does not yet support inline function tools; ${inlineToolCount} tool(s) were omitted. ` +
+        'Export as Python if they are required.'
+    );
+  }
+  if (renderConfig.hasShell || renderConfig.hasFileOperations) {
+    note(
+      JAVA_BUILTIN_TOOLS_NOTE_CATEGORY,
+      'Java/SpringAI export does not yet support builtin shell or file_operations tools; they were omitted.'
+    );
+  }
+  const hasUnsupportedSkills =
+    (renderConfig.s3Skills?.length ?? 0) > 0 || (renderConfig.gitSkills ?? []).some(skill => skill.credentialArn);
+  if (hasUnsupportedSkills) {
+    note(
+      JAVA_SKILLS_NOTE_CATEGORY,
+      'Java/SpringAI export supports path and public-git skills; s3 and private-git skills are not yet supported ' +
+        'and were omitted.'
+    );
+  }
+  if (renderConfig.actorId) {
+    note(
+      JAVA_ACTOR_ID_NOTE_CATEGORY,
+      'Java export does not yet apply the harness actorId; the agent derives the actor from the runtime user-id header (default default-user).'
+    );
+  }
+  note(
+    JAVA_PAYLOAD_NOTE_CATEGORY,
+    'The Java agent accepts {"prompt": …} only; messages/tool_results payload shapes are not yet supported.'
+  );
+}
+
 function resolveBuildType(spec: HarnessSpec, override?: BuildType): BuildType {
   if (override) return override;
   if (spec.containerUri || spec.dockerfile) return 'Container';
@@ -1009,7 +1146,7 @@ function parseS3SkillArns(
   return { bucket, bucketArn, objectArn };
 }
 
-function isGitSkill(skill: HarnessSkill): skill is HarnessSkillGitSource {
+export function isGitSkill(skill: HarnessSkill): skill is HarnessSkillGitSource {
   return 'gitUrl' in skill;
 }
 
@@ -1069,6 +1206,36 @@ function resolveTruncationConfig(truncation: HarnessTruncationConfig | undefined
         .map(([k, v]) => [v, s[k]])
     );
     return Object.keys(out).length > 0 ? out : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Java: map the harness truncation limit onto the AgentCore Memory retrieval window
+ * (`agentcore.memory.short-term.total-events-limit`). Sliding-window uses messagesCount, summarization
+ * uses preserveRecentMessages. The window is memory-backed, so this only applies when the agent has
+ * memory; the coverage note explains the truncation-without-memory case. Returns {} otherwise.
+ */
+function buildSessionTruncationRenderConfig(
+  spec: HarnessSpec,
+  isJava: boolean,
+  hasMemory: boolean
+): Pick<AgentRenderConfig, 'sessionTotalEventsLimit'> {
+  const strategy = spec.truncation?.strategy;
+  if (!isJava || !hasMemory || (strategy !== 'sliding_window' && strategy !== 'summarization')) return {};
+  const limit = resolveSessionEventsLimit(spec.truncation);
+  return limit !== undefined ? { sessionTotalEventsLimit: limit } : {};
+}
+
+/** The retrieval-window size: sliding_window.messagesCount or summarization.preserveRecentMessages. */
+function resolveSessionEventsLimit(truncation: HarnessTruncationConfig | undefined): number | undefined {
+  const config = truncation?.config;
+  if (!config) return undefined;
+  if (truncation.strategy === 'sliding_window' && 'slidingWindow' in config) {
+    return config.slidingWindow?.messagesCount;
+  }
+  if (truncation.strategy === 'summarization' && 'summarization' in config) {
+    return (config.summarization as { preserveRecentMessages?: number })?.preserveRecentMessages;
   }
   return undefined;
 }

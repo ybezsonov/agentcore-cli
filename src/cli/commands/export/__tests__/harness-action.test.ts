@@ -5,6 +5,8 @@ import {
 } from '../constants';
 import {
   buildCustomDockerfileNote,
+  buildGitSkillsClonedFailedNote,
+  buildGitSkillsClonedNote,
   buildMissingDockerfileNote,
   buildPathSkillsCopiedNote,
   buildPathSkillsVerifyNote,
@@ -64,6 +66,32 @@ describe('buildPathSkillsCopiedNote', () => {
     expect(note.message).toContain('directories were copied');
     expect(note.message).toContain('"skills/a"');
     expect(note.message).toContain('"skills/b"');
+  });
+
+  it('describes the Java classpath-resource destination when isJava (B3a)', () => {
+    const note = buildPathSkillsCopiedNote(['skills/greeting'], 'MyAgent', true);
+    expect(note.message).toContain('app/MyAgent/src/main/resources/skills/');
+    expect(note.message).toContain('SkillsTool');
+    expect(note.message).toContain('"skills/greeting"');
+  });
+});
+
+describe('buildGitSkillsClonedNote', () => {
+  it('states public git repos were cloned at export into the classpath skills dir (B3c-public)', () => {
+    const note = buildGitSkillsClonedNote(['https://github.com/org/repo'], 'MyAgent');
+    expect(note.message).toContain('https://github.com/org/repo');
+    expect(note.message).toContain('app/MyAgent/src/main/resources/skills/');
+    expect(note.message).toContain('SkillsTool');
+    expect(note.message).toContain('no runtime fetch');
+  });
+});
+
+describe('buildGitSkillsClonedFailedNote', () => {
+  it('explains the repo was not staged and that private repos are unsupported', () => {
+    const note = buildGitSkillsClonedFailedNote(['https://github.com/org/repo'], 'MyAgent');
+    expect(note.message).toContain('https://github.com/org/repo');
+    expect(note.message).toContain('NOT staged');
+    expect(note.message).toMatch(/[Pp]rivate repos are not yet supported/);
   });
 });
 
