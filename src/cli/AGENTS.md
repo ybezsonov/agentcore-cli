@@ -56,13 +56,17 @@ The TUI is defined using ink, a library that converts React definitions to termi
 
 Ink supports a subset of React features and components should be directly imported from ink.
 
-The `dev` command uses a strategy pattern with a `DevServer` base class and two implementations:
+The `dev` command uses a strategy pattern with a `DevServer` base class and three implementations:
 
 - **CodeZipDevServer**: Runs uvicorn locally with Python venv hot-reload
 - **ContainerDevServer**: Builds and runs a Docker container with volume mount for hot-reload. Detects
   Docker/Podman/Finch via the `detectContainerRuntime()` utility.
+- **MvnDevServer**: Runs Spring AI Java agents through native Maven.
 
-The server selection is based on `agent.build` (`CodeZip` or `Container`).
+Java agents use `MvnDevServer`, detected by `pom.xml` under the runtime's `codeLocation`; it runs `mvn spring-boot:run`
+with `AWS_REGION` passed through and does not provide hot reload.
+
+Server selection checks Java first, then dispatches other agents by `agent.build` (`CodeZip` or `Container`).
 
 ## Primitives Architecture
 

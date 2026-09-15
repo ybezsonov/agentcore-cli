@@ -132,6 +132,10 @@ Controls how agents authenticate with the gateway.
 | `AWS_IAM`    | SigV4 signed requests                        | AWS-native agents    |
 | `CUSTOM_JWT` | OIDC-based JWT validation with Bearer tokens | External IdPs, M2M   |
 
+> **Spring AI Java:** Java agents support only `AWS_IAM` gateways, signed with SigV4 via `McpClientCustomizer`. `NONE`
+> and `CUSTOM_JWT` are rejected: `Gateway "${name}" uses ${authorizerType}; Java agents support only AWS_IAM gateways.`
+> See [Spring AI (Java)](frameworks.md#spring-ai-java).
+
 #### CUSTOM_JWT Setup
 
 ```bash
@@ -222,6 +226,10 @@ agentcore remove agent --name MyOldAgent
 ```
 
 ### Manual: Update Existing Agent Code
+
+The `client.py`, `main.py`, and `pyproject.toml` procedure below is Python-specific. For Java, create a new Spring AI
+agent as the reference and follow the [Spring AI (Java)](frameworks.md#spring-ai-java) support boundary; do not copy the
+Python `mcp-proxy-for-aws` path into Java code.
 
 If you have a heavily customized agent that can't be easily recreated, you can manually add gateway client code. The
 exact code depends on your framework and gateway auth type.

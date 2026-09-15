@@ -15,6 +15,8 @@ runtimes:
 The CLI auto-detects the first working runtime in the order listed above. If multiple are installed, the
 highest-priority one wins.
 
+Java agents run `agentcore dev` with Maven, so their local development needs no container runtime.
+
 > A local runtime is **not** required for `agentcore deploy` — AWS CodeBuild builds the image remotely.
 
 ## Getting Started
@@ -25,6 +27,9 @@ agentcore create --name MyProject --build Container
 
 # Add container agent to existing project
 agentcore add agent --name MyAgent --build Container --framework Strands --model-provider Bedrock
+
+# Java agents are Container-only
+agentcore create --name MyJavaAgent --language Java --framework SpringAI --model-provider Bedrock --build Container
 ```
 
 Both commands generate a `Dockerfile` and `.dockerignore` in the agent's code directory:
@@ -73,6 +78,36 @@ Example `agentcore.json` for a TypeScript container agent:
   "runtimeVersion": "NODE_22"
 }
 ```
+
+### Java Dockerfile
+
+Java agents use a two-stage Dockerfile with Maven and Amazon Corretto 21. The build stage packages the Spring Boot jar;
+the non-root runtime stage starts that jar with the image `CMD` and exposes HTTP port 8080. The generated image does not
+fetch or wire a Java OTel agent.
+
+```text
+app/MyJavaAgent/
+├── pom.xml
+├── src/main/java/com/example/agent/
+├── src/main/resources/application.properties
+├── Dockerfile
+└── .dockerignore
+```
+
+Java remains Container-only. Its `entrypoint` is placeholder metadata accepted by the currently vended CDK; the image
+`CMD` starts the jar and `main.py` is not executed. The placeholder can go once the CDK accepts a Java entrypoint.
+
+```json
+{
+  "name": "MyJavaAgent",
+  "build": "Container",
+  "entrypoint": "main.py",
+  "codeLocation": "app/MyJavaAgent/",
+  "instrumentation": { "enableOtel": false }
+}
+```
+
+See [Spring AI (Java)](frameworks.md#spring-ai-java) for the supported matrix and limitations.
 
 ## Configuration
 
@@ -172,6 +207,9 @@ For container agents, the dev server:
 1. Builds the container image and adds a dev layer with `uvicorn`
 2. Runs the container with your source directory volume-mounted at `/app`
 3. Enables hot reload via `uvicorn --reload` — code changes apply without rebuilding
+
+Java agents instead run `mvn spring-boot:run` natively and do not provide hot reload. See
+[Java local development](local-development.md#java-agents) and [Spring AI (Java)](frameworks.md#spring-ai-java).
 
 AWS credentials are forwarded automatically (environment variables and `~/.aws` mounted read-only).
 

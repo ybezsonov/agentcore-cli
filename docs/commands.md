@@ -63,6 +63,15 @@ agentcore create \
   --framework Strands \
   --model-provider Bedrock
 
+# Java (Spring AI)
+agentcore create \
+  --name MyJavaProject \
+  --language Java \
+  --framework SpringAI \
+  --model-provider Bedrock \
+  --protocol HTTP \
+  --build Container
+
 # Preview without creating
 agentcore create --name MyProject --framework Strands --model-provider Bedrock --dry-run
 
@@ -84,7 +93,7 @@ agentcore create \
 | `--defaults`                          | Create a harness project with default settings (this is the default)                                           |
 | `--no-agent`                          | Skip agent creation                                                                                            |
 | `--type <type>`                       | `create` (default) or `import`                                                                                 |
-| `--language <lang>`                   | `Python` (default) or `TypeScript` (Strands-only; see [Frameworks](frameworks.md#supported-languages))         |
+| `--language <lang>`                   | `Python` (default), `TypeScript`, or `Java` (see [Frameworks](frameworks.md#supported-languages))              |
 | `--framework <fw>`                    | `Strands`, `LangChain_LangGraph`, `GoogleADK`, `OpenAIAgents`, `VercelAI`, `BedrockManagedAgents` (or `BMA`)   |
 | `--model-provider <p>`                | `Bedrock`, `Anthropic`, `OpenAI`, `Gemini`                                                                     |
 | `--build <type>`                      | `CodeZip` (default) or `Container` (see [Container Builds](container-builds.md))                               |
@@ -107,6 +116,9 @@ agentcore create \
 | `--skip-install`                      | Skip all dependency installation (npm install, uv sync)                                                        |
 | `--dry-run`                           | Preview without creating                                                                                       |
 | `--json`                              | JSON output                                                                                                    |
+
+Java agents use `--framework SpringAI` and accept only the combination documented in
+[Spring AI (Java)](frameworks.md#spring-ai-java).
 
 ### deploy
 
@@ -260,6 +272,14 @@ agentcore add agent \
   --model-provider Bedrock \
   --memory shortTerm
 
+# Create a Java agent from the Spring AI template
+agentcore add agent \
+  --name MyJavaAgent \
+  --language Java \
+  --framework SpringAI \
+  --model-provider Bedrock \
+  --memory none
+
 # Bring your own code
 agentcore add agent \
   --name MyAgent \
@@ -294,8 +314,8 @@ agentcore add agent \
 | `--name <name>`                        | Agent name (alphanumeric + underscores, starts with letter, max 48 chars)                                                                                                                                                                                                                            |
 | `--type <type>`                        | `create` (default), `byo`, or `import`                                                                                                                                                                                                                                                               |
 | `--build <type>`                       | `CodeZip` (default) or `Container` (see [Container Builds](container-builds.md))                                                                                                                                                                                                                     |
-| `--language <lang>`                    | `Python` (create); `Python`, `TypeScript`, `Other` (BYO)                                                                                                                                                                                                                                             |
-| `--framework <fw>`                     | `Strands`, `LangChain_LangGraph`, `GoogleADK`, `OpenAIAgents`, `VercelAI`, `BedrockManagedAgents` (or `BMA`)                                                                                                                                                                                         |
+| `--language <lang>`                    | `Python`, `TypeScript`, or `Java` (create); `Python`, `TypeScript`, `Java`, `Other` (BYO; see [Spring AI](frameworks.md#spring-ai-java))                                                                                                                                                             |
+| `--framework <fw>`                     | `Strands`, `LangChain_LangGraph`, `GoogleADK`, `OpenAIAgents`, `VercelAI`, `BedrockManagedAgents` (or `BMA`), `SpringAI`                                                                                                                                                                             |
 | `--model-provider <p>`                 | `Bedrock`, `Anthropic`, `OpenAI`, `Gemini`                                                                                                                                                                                                                                                           |
 | `--api-key <key>`                      | API key for non-Bedrock providers                                                                                                                                                                                                                                                                    |
 | `--memory <opt>`                       | `none`, `shortTerm`, `longAndShortTerm` (create and import; see [Memory Shorthand Mapping](memory.md#--memory-shorthand-mapping))                                                                                                                                                                    |
@@ -322,9 +342,12 @@ agentcore add agent \
 | `--cp-volume-name <name>`              | Capacity provider volume name to mount (repeatable, paired by position with `--cp-volume-mount-path`). The name must match a volume defined on the attached capacity provider.                                                                                                                       |
 | `--cp-volume-mount-path <path>`        | Capacity provider volume mount path under `/mnt` (e.g. `/mnt/models`, repeatable, paired with `--cp-volume-name`)                                                                                                                                                                                    |
 | `--with-config-bundle`                 | Wire a config bundle into the generated agent template                                                                                                                                                                                                                                               |
+| `--system-prompt <text>`               | System prompt for the generated agent (Java create path only; default: `You are a helpful assistant for <name>.`)                                                                                                                                                                                    |
 | `--idle-timeout <seconds>`             | Idle session timeout in seconds                                                                                                                                                                                                                                                                      |
 | `--max-lifetime <seconds>`             | Max instance lifetime in seconds                                                                                                                                                                                                                                                                     |
 | `--json`                               | JSON output                                                                                                                                                                                                                                                                                          |
+
+Java accepts only the combination documented in [Spring AI (Java)](frameworks.md#spring-ai-java).
 
 ### add memory
 
@@ -881,7 +904,8 @@ agentcore remove all --dry-run  # Preview
 
 ### dev
 
-Start local development server with hot-reload.
+Start local development server with hot-reload. Java agents run with Maven and have no hot reload; see
+[Java local development](local-development.md#java-agents).
 
 ```bash
 agentcore dev

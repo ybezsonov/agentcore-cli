@@ -20,6 +20,7 @@ AgentCore with minimal configuration.
 
 - **Node.js** 20.x or later
 - **uv** for Python agents ([install](https://docs.astral.sh/uv/getting-started/installation/))
+- **Java 21** and **Maven 3.9+** for Java local development
 
 ## Installation
 
@@ -69,6 +70,7 @@ agentcore invoke
 | Google ADK             | Gemini models only                                                          |
 | OpenAI Agents          | OpenAI models only                                                          |
 | Bedrock Managed Agents | Runtime environment for Bedrock Managed Agents sessions (Python, Container) |
+| Spring AI              | Java only; Bedrock, HTTP, Container                                         |
 
 ## Supported Model Providers
 
@@ -109,7 +111,7 @@ you want infra without writing agent code.
 | `add harness`    | Add a harness resource (runtime + model + memory)                           |
 | `add tool`       | Add a tool to a harness (`--harness <name> --type <type> --name <name>`)    |
 | `add skill`      | Add a skill to a harness (`--harness <name>` + `--path` / `--s3` / `--git`) |
-| `export harness` | Export a harness config to a deployable Strands Python agent under `app/`   |
+| `export harness` | Export a harness config to a deployable Python (Strands) or Java agent      |
 
 > After `export harness`, **read `app/<agentName>/EXPORT_NOTES.md`** before running `deploy` — it lists any manual
 > follow-up the exporter could not automate.
@@ -259,6 +261,18 @@ my-project/
 │       ├── pyproject.toml  # Python dependencies
 │       └── model/          # Model configuration
 ```
+
+Java agents use a Maven layout instead:
+
+```text
+app/<AgentName>/
+├── pom.xml
+├── src/main/java/com/example/agent/
+├── src/main/resources/application.properties
+└── Dockerfile
+```
+
+The Java runtime's configured `main.py` is Container validation metadata; the image starts the jar.
 
 ## Configuration
 
