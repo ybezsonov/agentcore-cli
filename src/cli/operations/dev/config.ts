@@ -1,6 +1,7 @@
 import { ConfigIO, findConfigRoot } from '../../../lib';
 import type { AgentCoreProjectSpec, AgentEnvSpec, BuildType, ProtocolMode } from '../../../schema';
 import { A2A_DEFAULT_PORT, MCP_DEFAULT_PORT } from './constants';
+import { existsSync } from 'node:fs';
 import { dirname, isAbsolute, join } from 'node:path';
 
 export interface DevConfig {
@@ -9,6 +10,8 @@ export interface DevConfig {
   directory: string;
   hasConfig: boolean;
   isPython: boolean;
+  /** A Container agent with a pom.xml, run with Maven. */
+  isJava?: boolean;
   buildType: BuildType;
   protocol: ProtocolMode;
   dockerfile?: string;
@@ -170,6 +173,7 @@ export function getDevConfig(
     directory,
     hasConfig: true,
     isPython: isPythonAgent(targetAgent),
+    isJava: targetAgent.build === 'Container' && existsSync(join(directory, 'pom.xml')),
     buildType: targetAgent.build,
     protocol: targetAgent.protocol ?? 'HTTP',
     dockerfile: targetAgent.dockerfile,

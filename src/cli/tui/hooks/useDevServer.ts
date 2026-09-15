@@ -209,7 +209,8 @@ export function useDevServer(options: {
             !serverReady &&
             (message.includes('Application startup complete') ||
               message.includes('Uvicorn running') ||
-              message.includes('Server listening'))
+              message.includes('Server listening') ||
+              (config.isJava && message.includes('Started AgentApplication')))
           ) {
             serverReady = true;
             setStatus('running');
