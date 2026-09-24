@@ -844,12 +844,13 @@ export async function validateAddGatewayTargetOptions(options: AddGatewayTargetO
       // Local file validation — resolve relative to project root (parent of agentcore/)
       const configRoot = findConfigRoot();
       const projectRoot = configRoot ? dirname(configRoot) : undefined;
-      const resolvedPath = projectRoot ? join(projectRoot, options.schema) : resolve(options.schema);
+      const resolvedPath =
+        projectRoot && !isAbsolute(options.schema) ? join(projectRoot, options.schema) : resolve(options.schema);
       if (!existsSync(resolvedPath)) {
         return {
           valid: false,
           error: projectRoot
-            ? `Schema file not found: ${options.schema} (resolved to ${resolvedPath}). Path should be relative to the project root.`
+            ? `Schema file not found: ${options.schema} (resolved to ${resolvedPath}). Use an absolute path or a path relative to the project root.`
             : `Schema file not found: ${options.schema}`,
         };
       }
