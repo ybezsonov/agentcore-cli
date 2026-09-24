@@ -83,7 +83,11 @@ agentcore add gateway-target \
   --credential-name MyOAuth
 ```
 
-Outbound auth is required (`oauth` or `api-key`). Schema path is relative to project root.
+Outbound auth is required (`oauth` or `api-key`). The schema path is absolute or relative to the project root.
+
+Each operation becomes the tool `<target>___<operationId>`. Model providers such as Bedrock reject tool names longer
+than 64 characters, so `add gateway-target` rejects a schema whose operations would exceed that; use short
+`operationId`s.
 
 ### Smithy Model (`smithy-model`)
 

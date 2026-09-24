@@ -57,6 +57,40 @@ export const DEFAULT_DELIVERY_TYPE = 'kinesis';
 /**
  * Validate that a credential name exists in the project spec.
  */
+/** Bedrock Converse rejects any request whose tool names exceed this length. */
+const MAX_TOOL_NAME_LENGTH = 64;
+
+/**
+ * The gateway exposes each OpenAPI operation as the tool `<target>___<operationId>`. A single name over
+ * the Bedrock limit makes every model call that lists the gateway's tools fail, so reject it here.
+ * Operations without an operationId are skipped because the gateway names them itself.
+ */
+export function validateOpenApiToolNameLengths(schemaPath: string, targetName: string): ValidationResult {
+  let spec: unknown;
+  try {
+    spec = JSON.parse(readFileSync(schemaPath, 'utf-8'));
+  } catch {
+    return { valid: false, error: `Schema file is not valid JSON: ${schemaPath}` };
+  }
+  const paths = (spec as { paths?: Record<string, Record<string, { operationId?: unknown }>> })?.paths ?? {};
+  const tooLong: string[] = [];
+  for (const operations of Object.values(paths)) {
+    for (const operation of Object.values(operations ?? {})) {
+      const operationId = operation?.operationId;
+      if (typeof operationId !== 'string') continue;
+      const toolName = `${targetName}___${operationId}`;
+      if (toolName.length > MAX_TOOL_NAME_LENGTH) tooLong.push(`${toolName} (${toolName.length})`);
+    }
+  }
+  if (tooLong.length === 0) return { valid: true };
+  return {
+    valid: false,
+    error:
+      `Tool names <target>___<operationId> must be at most ${MAX_TOOL_NAME_LENGTH} characters (Bedrock limit): ` +
+      `${tooLong.join(', ')}. Shorten the operationIds in the schema or the target name.`,
+  };
+}
+
 async function validateCredentialExists(credentialName: string): Promise<ValidationResult> {
   try {
     const configIO = new ConfigIO();
@@ -857,6 +891,10 @@ export async function validateAddGatewayTargetOptions(options: AddGatewayTargetO
       const ext = extname(resolvedPath).toLowerCase();
       if (ext !== '.json') {
         return { valid: false, error: `Schema file must be a JSON file (.json), got: ${ext}` };
+      }
+      if (mappedType === 'openApiSchema' && options.name) {
+        const toolNameResult = validateOpenApiToolNameLengths(resolvedPath, options.name);
+        if (!toolNameResult.valid) return toolNameResult;
       }
     }
 

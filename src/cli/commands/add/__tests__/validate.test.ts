@@ -873,6 +873,37 @@ describe('validate', () => {
       expect(vi.mocked(existsSync)).toHaveBeenCalledWith('/absolute/path/openapi.json');
     });
 
+    it('rejects open-api-schema operations whose tool name exceeds 64 characters', async () => {
+      mockReadProjectSpec.mockResolvedValue({
+        agentCoreGateways: [{ name: 'my-gateway' }],
+        credentials: [{ name: 'api-cred', type: 'ApiKey' }],
+      });
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(readFileSync).mockReturnValue(
+        JSON.stringify({
+          openapi: '3.0.0',
+          paths: {
+            '/short': { get: { operationId: 'getPublicHolidays' } },
+            '/long': {
+              parameters: [],
+              get: { operationId: 'IotHolidays_GET_Determines_whether_today_is_a_' },
+            },
+          },
+        })
+      );
+      const result = await validateAddGatewayTargetOptions({
+        name: 'holidays-openapi',
+        type: 'open-api-schema',
+        schema: '/absolute/path/openapi.json',
+        gateway: 'my-gateway',
+        outboundAuthType: 'API_KEY',
+        credentialName: 'api-cred',
+      });
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('holidays-openapi___IotHolidays_GET_Determines_whether_today_is_a_ (65)');
+      expect(result.error).not.toContain('getPublicHolidays');
+    });
+
     it('accepts lambda-function-arn with relative path resolved from project root', async () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify([{ name: 'tool1', description: 'desc' }]));
