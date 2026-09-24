@@ -109,6 +109,12 @@ export const MAX_RUNTIME_NAME_LENGTH = 48;
 export const MAX_GATEWAY_NAME_LENGTH = 48;
 
 /**
+ * Max length Bedrock Converse allows for a tool name. A gateway exposes each OpenAPI operation as the
+ * tool `<target>___<operationId>`; one longer name fails every model call that lists the gateway's tools.
+ */
+export const MAX_TOOL_NAME_LENGTH = 64;
+
+/**
  * Current schema version for AgentCore configuration files.
  */
 export const SCHEMA_VERSION = 1;

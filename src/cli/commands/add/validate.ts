@@ -25,6 +25,7 @@ import {
   matchSdkFramework,
   validateApiFormat,
 } from '../../../schema';
+import { MAX_TOOL_NAME_LENGTH } from '../../constants';
 import { applyTemplateOptionDefaults, validateTemplateOptions } from '../../templates/profiles';
 import { ARN_VALIDATION_MESSAGE, isValidArn } from '../shared/arn-utils';
 import { validateHeaderAllowlist } from '../shared/header-utils';
@@ -54,7 +55,40 @@ const MEMORY_OPTIONS = ['none', 'shortTerm', 'longAndShortTerm'] as const;
 const VALID_STRATEGIES = ['SEMANTIC', 'SUMMARIZATION', 'USER_PREFERENCE', 'EPISODIC'];
 const VALID_STREAM_CONTENT_LEVELS = ['FULL_CONTENT', 'METADATA_ONLY'];
 const VALID_DELIVERY_TYPES = ['kinesis'] as const;
+const OPENAPI_HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'] as const;
 export const DEFAULT_DELIVERY_TYPE = 'kinesis';
+
+/**
+ * The gateway exposes each OpenAPI operation as the tool `<target>___<operationId>`. A single name over
+ * the Bedrock limit makes every model call that lists the gateway's tools fail, so reject it here.
+ * Operations without an operationId are skipped because the gateway names them itself.
+ */
+export function validateOpenApiToolNameLengths(schemaPath: string, targetName: string): ValidationResult {
+  let spec: unknown;
+  try {
+    spec = JSON.parse(readFileSync(schemaPath, 'utf-8'));
+  } catch {
+    return { valid: false, error: `Schema file is not valid JSON: ${schemaPath}` };
+  }
+  const paths = (spec as { paths?: Record<string, Record<string, { operationId?: unknown }>> })?.paths ?? {};
+  const tooLong: string[] = [];
+  for (const pathItem of Object.values(paths)) {
+    // Only the HTTP-method fields of a path item are operations; `parameters`, `servers` and `x-*` are not.
+    for (const method of OPENAPI_HTTP_METHODS) {
+      const operationId = pathItem?.[method]?.operationId;
+      if (typeof operationId !== 'string') continue;
+      const toolName = `${targetName}___${operationId}`;
+      if (toolName.length > MAX_TOOL_NAME_LENGTH) tooLong.push(`${toolName} (${toolName.length})`);
+    }
+  }
+  if (tooLong.length === 0) return { valid: true };
+  return {
+    valid: false,
+    error:
+      `Tool names <target>___<operationId> must be at most ${MAX_TOOL_NAME_LENGTH} characters (Bedrock limit): ` +
+      `${tooLong.join(', ')}. Shorten the operationIds in the schema or the target name.`,
+  };
+}
 
 /**
  * Validate that a credential name exists in the project spec.
@@ -864,6 +898,10 @@ export async function validateAddGatewayTargetOptions(options: AddGatewayTargetO
       const ext = extname(resolvedPath).toLowerCase();
       if (ext !== '.json') {
         return { valid: false, error: `Schema file must be a JSON file (.json), got: ${ext}` };
+      }
+      if (mappedType === 'openApiSchema' && options.name) {
+        const toolNameResult = validateOpenApiToolNameLengths(resolvedPath, options.name);
+        if (!toolNameResult.valid) return toolNameResult;
       }
     }
 
