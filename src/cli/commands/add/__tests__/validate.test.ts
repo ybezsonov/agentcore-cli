@@ -854,6 +854,25 @@ describe('validate', () => {
       expect(vi.mocked(readFileSync)).toHaveBeenCalledWith('/absolute/path/tools.json', 'utf-8');
     });
 
+    it('accepts open-api-schema with an absolute --schema path', async () => {
+      mockReadProjectSpec.mockResolvedValue({
+        agentCoreGateways: [{ name: 'my-gateway' }],
+        credentials: [{ name: 'api-cred', type: 'ApiKey' }],
+      });
+      vi.mocked(existsSync).mockClear().mockReturnValue(true);
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ openapi: '3.0.0', paths: {} }));
+      const result = await validateAddGatewayTargetOptions({
+        name: 'holidays',
+        type: 'open-api-schema',
+        schema: '/absolute/path/openapi.json',
+        gateway: 'my-gateway',
+        outboundAuthType: 'API_KEY',
+        credentialName: 'api-cred',
+      });
+      expect(result.valid).toBe(true);
+      expect(vi.mocked(existsSync)).toHaveBeenCalledWith('/absolute/path/openapi.json');
+    });
+
     it('accepts lambda-function-arn with relative path resolved from project root', async () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify([{ name: 'tool1', description: 'desc' }]));
