@@ -2,6 +2,7 @@ import { parseJsonRpcResponse } from '../../lib/utils/json-rpc';
 import { getCredentialProvider } from './account';
 import { parseAguiSSEStream } from './agui-parser';
 import { serviceEndpoint } from './partition';
+import { extractResult, isSSEResponse, parseSSE, readSSEStream } from './sse';
 import { dataPlaneEndpoint } from './stage-endpoint';
 import {
   BedrockAgentCoreClient,
@@ -13,6 +14,8 @@ import {
 } from '@aws-sdk/client-bedrock-agentcore';
 import type { HttpRequest } from '@smithy/protocol-http';
 import type { DocumentType } from '@smithy/types';
+
+export { extractResult, isSSEResponse, parseSSE, parseSSELine } from './sse';
 
 /** Local definition — SDK does not yet export this type. */
 export interface EvaluationReferenceInput {
@@ -109,68 +112,6 @@ export interface StopRuntimeSessionResult {
 }
 
 /**
- * Parse a single SSE data line and extract the content.
- * Returns null if the line is not a data line or contains an error.
- */
-export function parseSSELine(line: string): { content: string | null; error: string | null } {
-  if (!line.startsWith('data: ')) {
-    return { content: null, error: null };
-  }
-  const raw = line.slice(6);
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed === 'string') {
-      return { content: parsed, error: null };
-    } else if (parsed && typeof parsed === 'object' && 'error' in parsed) {
-      return { content: null, error: String((parsed as { error: unknown }).error) };
-    }
-    // ConverseStream-shaped event: extract text delta
-    const event = (parsed as { event?: { contentBlockDelta?: { delta?: { text?: string } } } })?.event;
-    const text = event?.contentBlockDelta?.delta?.text;
-    if (typeof text === 'string') {
-      return { content: text, error: null };
-    }
-  } catch {
-    return { content: raw, error: null };
-  }
-  return { content: null, error: null };
-}
-
-/**
- * Parse SSE response into combined text.
- */
-export function parseSSE(text: string): string {
-  const parts: string[] = [];
-  for (const line of text.split('\n')) {
-    const { content, error } = parseSSELine(line);
-    if (error) {
-      return `Error: ${error}`;
-    }
-    if (content) {
-      parts.push(content);
-    }
-  }
-  return parts.join('');
-}
-
-/**
- * Extract result from a JSON response object.
- * Handles both {"result": "..."} and plain text responses.
- */
-export function extractResult(text: string): string {
-  try {
-    const parsed: unknown = JSON.parse(text);
-    if (parsed && typeof parsed === 'object' && 'result' in parsed) {
-      const result = (parsed as { result: unknown }).result;
-      return typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-    }
-    return typeof parsed === 'string' ? parsed : JSON.stringify(parsed, null, 2);
-  } catch {
-    return text;
-  }
-}
-
-/**
  * Build the JSON payload body for an invoke request.
  * Includes payment context fields only when provided.
  */
@@ -258,66 +199,7 @@ async function invokeWithBearerTokenStreaming(options: InvokeAgentRuntimeOptions
     throw new Error('No response body from AgentCore Runtime');
   }
 
-  // Assign to const after null check so TypeScript narrows the type inside the generator
-  const reader = bodyReader;
-  const decoder = new TextDecoder();
-  const { logger } = options;
-
-  async function* streamGenerator(): AsyncGenerator<string, void, unknown> {
-    let buffer = '';
-    let fullResponse = '';
-    let yieldedContent = false;
-
-    try {
-      while (true) {
-        const result = await reader.read();
-        if (result.done) break;
-
-        const decoded = decoder.decode(result.value as Uint8Array | undefined, { stream: true });
-        buffer += decoded;
-        fullResponse += decoded;
-
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          if (logger && line.trim()) {
-            logger.logSSEEvent(line);
-          }
-          const { content, error } = parseSSELine(line);
-          if (error) {
-            yield `Error: ${error}`;
-            return;
-          }
-          if (content) {
-            yield content;
-            yieldedContent = true;
-          }
-        }
-      }
-
-      if (buffer) {
-        if (logger && buffer.trim()) {
-          logger.logSSEEvent(buffer);
-        }
-        const { content, error } = parseSSELine(buffer);
-        if (error) {
-          yield `Error: ${error}`;
-        } else if (content) {
-          yield content;
-          yieldedContent = true;
-        }
-      }
-
-      if (!yieldedContent && fullResponse.trim()) {
-        yield extractResult(fullResponse.trim());
-      }
-    } finally {
-      reader.releaseLock();
-    }
-  }
-
-  return { stream: streamGenerator(), sessionId };
+  return { stream: readSSEStream(bodyReader, options.logger), sessionId };
 }
 
 /**
@@ -340,7 +222,7 @@ async function invokeWithBearerToken(options: InvokeAgentRuntimeOptions): Promis
 
   const sessionId = res.headers.get('X-Amzn-Bedrock-AgentCore-Runtime-Session-Id') ?? undefined;
   const text = await res.text();
-  const content = text.includes('data: ') ? parseSSE(text) : extractResult(text);
+  const content = isSSEResponse(text) ? parseSSE(text) : extractResult(text);
 
   return { content, sessionId };
 }
@@ -378,72 +260,7 @@ export async function invokeAgentRuntimeStreaming(options: InvokeAgentRuntimeOpt
   }
 
   const webStream = response.response.transformToWebStream();
-  const reader = webStream.getReader();
-  const decoder = new TextDecoder();
-
-  async function* streamGenerator(): AsyncGenerator<string, void, unknown> {
-    let buffer = '';
-    let fullResponse = '';
-    let yieldedContent = false;
-    const { logger } = options;
-
-    try {
-      while (true) {
-        const result = await reader.read();
-        if (result.done) break;
-
-        const decoded = decoder.decode(result.value as Uint8Array, { stream: true });
-        buffer += decoded;
-        fullResponse += decoded;
-
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          // Log raw SSE line if logger provided
-          if (logger && line.trim()) {
-            logger.logSSEEvent(line);
-          }
-          const { content, error } = parseSSELine(line);
-          if (error) {
-            yield `Error: ${error}`;
-            return;
-          }
-          if (content) {
-            yield content;
-            yieldedContent = true;
-          }
-        }
-      }
-
-      // Process any remaining content in the buffer
-      if (buffer) {
-        // Log raw SSE line if logger provided
-        if (logger && buffer.trim()) {
-          logger.logSSEEvent(buffer);
-        }
-        const { content, error } = parseSSELine(buffer);
-        if (error) {
-          yield `Error: ${error}`;
-        } else if (content) {
-          yield content;
-          yieldedContent = true;
-        }
-      }
-
-      // Fallback for plain JSON responses (non-SSE)
-      if (!yieldedContent && fullResponse.trim()) {
-        yield extractResult(fullResponse.trim());
-      }
-    } finally {
-      reader.releaseLock();
-    }
-  }
-
-  return {
-    stream: streamGenerator(),
-    sessionId,
-  };
+  return { stream: readSSEStream(webStream.getReader(), options.logger), sessionId };
 }
 
 /**
@@ -476,7 +293,7 @@ export async function invokeAgentRuntime(options: InvokeAgentRuntimeOptions): Pr
   const text = new TextDecoder().decode(bytes);
 
   // Parse SSE format if present
-  const content = text.includes('data: ') ? parseSSE(text) : extractResult(text);
+  const content = isSSEResponse(text) ? parseSSE(text) : extractResult(text);
 
   return {
     content,

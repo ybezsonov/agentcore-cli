@@ -61,6 +61,7 @@ export {
   mcpListTools,
   mcpCallTool,
   parseSSE,
+  isSSEResponse,
   extractResult,
   stopRuntimeSession,
   type ExecuteBashOptions,
