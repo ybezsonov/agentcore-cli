@@ -98,6 +98,23 @@ describe('pipeSSETransformed', () => {
     expect(output.chunks).toEqual(['data: "bedrock response"\n\n']);
   });
 
+  it('keeps a UTF-8 character split across chunks', async () => {
+    const input = createMockInput();
+    const output = createMockOutput();
+
+    const done = pipeSSETransformed(input as unknown as IncomingMessage, output as unknown as ServerResponse);
+
+    const bytes = Buffer.from('data:{"text":"café"}\r\n\r\n');
+    const cut = bytes.indexOf(0xc3) + 1;
+    input.write(bytes.subarray(0, cut));
+    input.write(bytes.subarray(cut));
+    input.end();
+
+    await done;
+
+    expect(output.chunks).toEqual(['data: "café"\n\n']);
+  });
+
   it('rejects on input error', async () => {
     const input = createMockInput();
     const output = createMockOutput();

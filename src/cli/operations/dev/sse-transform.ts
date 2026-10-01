@@ -1,5 +1,6 @@
-import { parseSSELine } from './invoke';
+import { type ParsedSSELine, SSELineDecoder } from '../../aws/sse';
 import { type IncomingMessage, type ServerResponse } from 'node:http';
+import { StringDecoder } from 'node:string_decoder';
 
 /**
  * Pipe an SSE stream from an agent response to a client response,
@@ -11,31 +12,22 @@ import { type IncomingMessage, type ServerResponse } from 'node:http';
  */
 export function pipeSSETransformed(input: IncomingMessage, output: ServerResponse): Promise<void> {
   return new Promise((resolve, reject) => {
-    let buffer = '';
-
-    input.on('data', (chunk: Buffer) => {
-      buffer += chunk.toString();
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-      for (const line of lines) {
-        const { content, error } = parseSSELine(line);
+    const textDecoder = new StringDecoder('utf8');
+    const decoder = new SSELineDecoder();
+    const forward = (lines: ParsedSSELine[]) => {
+      for (const { content, error } of lines) {
         if (error) {
           output.write(`data: ${JSON.stringify({ error })}\n\n`);
         } else if (content) {
           output.write(`data: ${JSON.stringify(content)}\n\n`);
         }
       }
-    });
+    };
+
+    input.on('data', (chunk: Buffer) => forward(decoder.push(textDecoder.write(chunk))));
 
     input.on('end', () => {
-      if (buffer) {
-        const { content, error } = parseSSELine(buffer);
-        if (error) {
-          output.write(`data: ${JSON.stringify({ error })}\n\n`);
-        } else if (content) {
-          output.write(`data: ${JSON.stringify(content)}\n\n`);
-        }
-      }
+      forward([...decoder.push(textDecoder.end()), ...decoder.flush()]);
       output.end();
       resolve();
     });
